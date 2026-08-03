@@ -1,4 +1,3 @@
-"use client";
 
 import type { PGlite } from "@electric-sql/pglite";
 import type { QueryResult } from "./types";

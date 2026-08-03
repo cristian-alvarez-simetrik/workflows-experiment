@@ -1,4 +1,3 @@
-"use client";
 
 export type RunNodeStatus = "success" | "error" | "skipped";
 

@@ -1,4 +1,3 @@
-"use client";
 
 import type { Edge } from "@xyflow/react";
 import type { WorkflowNode } from "./types";

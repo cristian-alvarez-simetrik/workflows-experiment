@@ -1,4 +1,3 @@
-"use client";
 
 import { useReactFlow, type NodeProps } from "@xyflow/react";
 import { Database } from "lucide-react";

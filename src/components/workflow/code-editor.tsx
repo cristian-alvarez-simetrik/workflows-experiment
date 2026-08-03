@@ -1,4 +1,3 @@
-"use client";
 
 import CodeMirror, { EditorView } from "@uiw/react-codemirror";
 import { javascript } from "@codemirror/lang-javascript";

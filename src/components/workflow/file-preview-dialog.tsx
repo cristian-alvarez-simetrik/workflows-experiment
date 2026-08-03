@@ -1,4 +1,3 @@
-"use client";
 
 import { useMemo, useState } from "react";
 import Papa from "papaparse";

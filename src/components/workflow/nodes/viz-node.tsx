@@ -1,4 +1,3 @@
-"use client";
 
 import { useReactFlow, type NodeProps } from "@xyflow/react";
 import { Maximize2, Table2 } from "lucide-react";

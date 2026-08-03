@@ -1,4 +1,3 @@
-"use client";
 
 import Papa from "papaparse";
 import { getDb } from "./db";

@@ -1,4 +1,3 @@
-"use client";
 
 import { useCallback, useEffect, useState } from "react";
 import { Info, Maximize2 } from "lucide-react";

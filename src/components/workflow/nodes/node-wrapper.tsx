@@ -1,4 +1,3 @@
-"use client";
 
 import { useState } from "react";
 import { Handle, Position, useReactFlow } from "@xyflow/react";

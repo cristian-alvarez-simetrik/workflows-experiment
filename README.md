@@ -4,7 +4,7 @@ A client-only, node-based data workflow platform. Build graphs of file / script 
 
 ## Stack
 
-- **Next.js 16** (App Router, Turbopack) — everything runs client-side, no backend
+- **Vite + React** — a pure static SPA, no backend and no server runtime; deployable to GitHub Pages
 - **@xyflow/react (React Flow)** — node graph editor
 - **@electric-sql/pglite** — in-browser Postgres, persisted to IndexedDB (`idb://workflow-studio`)
 - **shadcn/ui** (Radix base) — dialogs, selects, popovers, dropdowns, alert dialogs, toasts
@@ -16,8 +16,14 @@ A client-only, node-based data workflow platform. Build graphs of file / script 
 
 ```bash
 npm install
-npm run dev
+npm run dev       # local dev server
+npm run build     # static build into dist/
+npm run preview   # serve the production build locally
 ```
+
+## Deploy to GitHub Pages
+
+Pushing to `main` triggers `.github/workflows/deploy.yml`, which builds `dist/` and publishes it with the official Pages actions — enable **Settings → Pages → Source: GitHub Actions** in the repo once. Manual alternative: `npm run deploy` (publishes `dist/` to a `gh-pages` branch). The Vite config uses `base: "./"`, so the build works from any subpath.
 
 ## Node types
 
@@ -39,6 +45,8 @@ npm run dev
 
 ```
 src/
+  main.tsx            entry point (mounts the canvas + toaster)
+  index.css           theme, fonts, scrollbars
   lib/
     db.ts             PGlite singleton + query helpers
     engine.ts         topo sort + node executors
