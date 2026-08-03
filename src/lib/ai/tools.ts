@@ -43,7 +43,7 @@ export function createWorkflowTools(apiRef: AgentApiRef) {
 
     update_node: tool({
       description:
-        "Update fields of an existing node. 'sql' applies to sql/viz nodes, 'code' to script nodes, 'parserScript'/'tableName' to file nodes, 'label' and 'position' to any node.",
+        "Update fields of an existing node. Only include the fields you want to change. 'sql' applies to sql/viz nodes, 'code' to script nodes, 'parserScript'/'tableName' to file nodes, 'label' and 'position' to any node.",
       inputSchema: z.object({
         nodeId: z.string(),
         label: z.string().optional(),
@@ -54,8 +54,10 @@ export function createWorkflowTools(apiRef: AgentApiRef) {
         position: z.object({ x: z.number(), y: z.number() }).optional(),
       }),
       execute: async ({ nodeId, ...fields }) => {
+        // Models often send every optional field as "" — treat empty values
+        // as "not provided" instead of failing type validation on them.
         const defined = Object.fromEntries(
-          Object.entries(fields).filter(([, v]) => v !== undefined)
+          Object.entries(fields).filter(([, v]) => v !== undefined && v !== "")
         );
         if (Object.keys(defined).length === 0) {
           throw new Error("No fields to update were provided.");
