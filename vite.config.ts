@@ -16,4 +16,13 @@ export default defineConfig({
     // PGlite ships WASM assets that break under Vite's dep pre-bundling.
     exclude: ["@electric-sql/pglite"],
   },
+  build: {
+    rollupOptions: {
+      onwarn(warning, warn) {
+        // AI Elements files carry "use client" directives that mean nothing in a SPA build.
+        if (warning.code === "MODULE_LEVEL_DIRECTIVE") return;
+        warn(warning);
+      },
+    },
+  },
 });

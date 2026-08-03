@@ -1,0 +1,121 @@
+import { tool } from "ai";
+import { z } from "zod";
+import type { AgentApiRef } from "./agent-api";
+
+/**
+ * Workflow tools for the chat agent. Created once per panel mount; every
+ * call goes through apiRef.current, which CanvasInner rebuilds each render,
+ * so the tools always see the live canvas state.
+ */
+export function createWorkflowTools(apiRef: AgentApiRef) {
+  const api = () => apiRef.current;
+
+  return {
+    list_nodes: tool({
+      description:
+        "List all nodes in the current workflow with their ids, types, labels, statuses and connections. Call this first to understand the graph.",
+      inputSchema: z.object({}),
+      execute: async () => api().listNodes(),
+    }),
+
+    get_node: tool({
+      description:
+        "Get the full detail of one node: its SQL, script code, parser script, table name, last error, logs and a truncated preview of its last result. File contents are never included.",
+      inputSchema: z.object({ nodeId: z.string() }),
+      execute: async ({ nodeId }) => api().getNode(nodeId),
+    }),
+
+    add_node: tool({
+      description:
+        "Add a new node to the workflow and return its id. Types: file (load a file into a PGlite table via a parser script — the USER must pick the actual file in the node UI), sql (run SQL against PGlite), script (JavaScript for validations or building SQL for downstream nodes), viz (render a query result as a table).",
+      inputSchema: z.object({
+        type: z.enum(["file", "sql", "script", "viz"]),
+        label: z.string().optional().describe("Human-friendly node title"),
+        position: z
+          .object({ x: z.number(), y: z.number() })
+          .optional()
+          .describe("Canvas position; omit to auto-place"),
+      }),
+      execute: async ({ type, label, position }) => ({
+        nodeId: api().addNode(type, label, position),
+      }),
+    }),
+
+    update_node: tool({
+      description:
+        "Update fields of an existing node. 'sql' applies to sql/viz nodes, 'code' to script nodes, 'parserScript'/'tableName' to file nodes, 'label' and 'position' to any node.",
+      inputSchema: z.object({
+        nodeId: z.string(),
+        label: z.string().optional(),
+        sql: z.string().optional(),
+        code: z.string().optional(),
+        parserScript: z.string().optional(),
+        tableName: z.string().optional(),
+        position: z.object({ x: z.number(), y: z.number() }).optional(),
+      }),
+      execute: async ({ nodeId, ...fields }) => {
+        const defined = Object.fromEntries(
+          Object.entries(fields).filter(([, v]) => v !== undefined)
+        );
+        if (Object.keys(defined).length === 0) {
+          throw new Error("No fields to update were provided.");
+        }
+        api().updateNode(nodeId, defined);
+        return { ok: true, updated: Object.keys(defined) };
+      },
+    }),
+
+    connect_nodes: tool({
+      description:
+        "Connect two nodes with an edge so the source's output flows into the target.",
+      inputSchema: z.object({
+        sourceId: z.string(),
+        targetId: z.string(),
+      }),
+      execute: async ({ sourceId, targetId }) => ({
+        edgeId: api().connectNodes(sourceId, targetId),
+      }),
+    }),
+
+    delete_node: tool({
+      description: "Delete a node and all edges attached to it.",
+      inputSchema: z.object({ nodeId: z.string() }),
+      execute: async ({ nodeId }) => {
+        api().deleteNode(nodeId);
+        return { ok: true };
+      },
+    }),
+
+    run_workflow: tool({
+      description:
+        "Run every node in the workflow in dependency order. Returns per-node status, summaries, errors and script logs. Always inspect the result for errors.",
+      inputSchema: z.object({}),
+      execute: async () => api().runWorkflow(),
+    }),
+
+    run_node: tool({
+      description:
+        "Run one node and everything downstream of it. Returns per-node results like run_workflow.",
+      inputSchema: z.object({ nodeId: z.string() }),
+      execute: async ({ nodeId }) => api().runNode(nodeId),
+    }),
+
+    get_run_history: tool({
+      description:
+        "Read the most recent run records for this workflow (newest first), including per-node statuses, errors and logs.",
+      inputSchema: z.object({
+        limit: z.number().int().min(1).max(20).default(5),
+      }),
+      execute: async ({ limit }) => api().getRunHistory(limit),
+    }),
+
+    query_database: tool({
+      description:
+        "Run a SQL statement directly against the in-browser PGlite database, e.g. to inspect tables or verify data. Results are capped at 50 rows.",
+      inputSchema: z.object({ sql: z.string() }),
+      execute: async ({ sql }) => api().queryDatabase(sql),
+    }),
+  };
+}
+
+export type WorkflowTools = ReturnType<typeof createWorkflowTools>;

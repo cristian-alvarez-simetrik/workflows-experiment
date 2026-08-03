@@ -1,5 +1,13 @@
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  lazy,
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   addEdge,
   Background,
@@ -11,6 +19,7 @@ import {
   useEdgesState,
   useNodesState,
   type Connection,
+  type Edge,
   type NodeTypes,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
@@ -21,6 +30,7 @@ import {
   Loader2,
   Play,
   Plus,
+  Sparkles,
   Table2,
   TableProperties,
   Trash2,
@@ -60,9 +70,16 @@ import {
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { listTables } from "@/lib/db";
+import {
+  assertEditableFields,
+  detailNode,
+  summarizeNode,
+  type AgentApi,
+  type RunSummary,
+} from "@/lib/ai/agent-api";
+import { listTables, runQuery } from "@/lib/db";
 import { runNodes, withDownstream } from "@/lib/engine";
-import { appendRun, type RunNodeEntry } from "@/lib/run-history";
+import { appendRun, listRuns, type RunNodeEntry } from "@/lib/run-history";
 import type { QueryResult, WorkflowNode, WorkflowNodeType } from "@/lib/types";
 import {
   createWorkflow,
@@ -75,6 +92,11 @@ import {
 import { FileNode, ScriptNode, SqlNode, VizNode } from "./nodes";
 import { RunContext } from "./run-context";
 import { RunHistoryDrawer } from "./run-history-drawer";
+
+// Lazy: keeps the AI SDK + markdown renderer out of the main bundle.
+const ChatPanel = lazy(() => import("./chat-panel"));
+
+const CHAT_OPEN_KEY = "workflow-studio:chat-open";
 
 const nodeTypes: NodeTypes = {
   file: FileNode,
@@ -241,10 +263,15 @@ function CanvasInner({ workflowId }: { workflowId: string }) {
   );
 
   const execute = useCallback(
-    async (targets: WorkflowNode[], allNodes: WorkflowNode[], trigger: string) => {
+    async (
+      targets: WorkflowNode[],
+      allNodes: WorkflowNode[],
+      currentEdges: Edge[],
+      trigger: string
+    ): Promise<RunSummary> => {
       if (targets.length === 0) {
         toast.info("Nothing to run — add some nodes first.");
-        return;
+        return { status: "success", nodes: [] };
       }
       setIsRunning(true);
       let hadError = false;
@@ -278,7 +305,7 @@ function CanvasInner({ workflowId }: { workflowId: string }) {
       };
 
       try {
-        await runNodes(targets, allNodes, edges, {
+        await runNodes(targets, allNodes, currentEdges, {
           onNodeStart: (id) => {
             startTimes.set(id, performance.now());
             patchNode(id, { status: "running", error: undefined });
@@ -324,13 +351,14 @@ function CanvasInner({ workflowId }: { workflowId: string }) {
         setRunsVersion((v) => v + 1);
       }
       if (!hadError) toast.success("Run completed");
+      return { status: hadError ? "error" : "success", nodes: entries };
     },
-    [edges, patchNode, activeId]
+    [patchNode, activeId]
   );
 
   const runAll = useCallback(() => {
-    void execute(nodes, nodes, "Run all");
-  }, [execute, nodes]);
+    void execute(nodes, nodes, edges, "Run all");
+  }, [execute, nodes, edges]);
 
   const runNode = useCallback(
     (id: string) => {
@@ -338,6 +366,7 @@ function CanvasInner({ workflowId }: { workflowId: string }) {
       void execute(
         withDownstream(id, nodes, edges),
         nodes,
+        edges,
         `Run: ${(start?.data.label as string) ?? id}`
       );
     },
@@ -345,6 +374,134 @@ function CanvasInner({ workflowId }: { workflowId: string }) {
   );
 
   const runner = useMemo(() => ({ runNode, isRunning }), [runNode, isRunning]);
+
+  const [chatOpen, setChatOpen] = useState(
+    () => localStorage.getItem(CHAT_OPEN_KEY) === "true"
+  );
+  const toggleChat = () =>
+    setChatOpen((open) => {
+      localStorage.setItem(CHAT_OPEN_KEY, String(!open));
+      return !open;
+    });
+
+  // --- AI agent bridge -----------------------------------------------------
+  // The chat tools live outside React's render cycle, so they read canvas
+  // state through refs that are re-synced every render. Mutations update the
+  // refs synchronously as well: the model often chains tool calls (add node →
+  // connect it) faster than React re-renders.
+  const nodesRef = useRef<WorkflowNode[]>([]);
+  nodesRef.current = nodes;
+  const edgesRef = useRef<Edge[]>([]);
+  edgesRef.current = edges;
+
+  const mutateNodes = useCallback(
+    (fn: (nds: WorkflowNode[]) => WorkflowNode[]) => {
+      nodesRef.current = fn(nodesRef.current);
+      setNodes(fn);
+    },
+    [setNodes]
+  );
+  const mutateEdges = useCallback(
+    (fn: (eds: Edge[]) => Edge[]) => {
+      edgesRef.current = fn(edgesRef.current);
+      setEdges((eds) => fn(eds as Edge[]) as never[]);
+    },
+    [setEdges]
+  );
+
+  const mustFind = (id: string): WorkflowNode => {
+    const node = nodesRef.current.find((n) => n.id === id);
+    if (!node) {
+      throw new Error(
+        `Unknown node id "${id}". Call list_nodes to see existing nodes.`
+      );
+    }
+    return node;
+  };
+
+  // Rebuilt every render; the ref identity handed to the chat panel is stable.
+  const agentApiRef = useRef<AgentApi>(null!);
+  agentApiRef.current = {
+    listNodes: () =>
+      nodesRef.current.map((n) => summarizeNode(n, edgesRef.current)),
+    getNode: (id) => detailNode(mustFind(id), edgesRef.current),
+    addNode: (type, label, position) => {
+      const pos = position ?? {
+        x: 120 + (nodesRef.current.length % 4) * 90,
+        y: 100 + (nodesRef.current.length % 5) * 70,
+      };
+      const node = makeNode(type, pos);
+      if (label) node.data.label = label;
+      mutateNodes((nds) => [...nds, node]);
+      return node.id;
+    },
+    updateNode: (id, fields) => {
+      const node = mustFind(id);
+      assertEditableFields(node.type as WorkflowNodeType, fields);
+      const { position, ...dataFields } = fields as {
+        position?: { x: number; y: number };
+      } & Record<string, unknown>;
+      mutateNodes((nds) =>
+        nds.map((n) =>
+          n.id === id
+            ? {
+                ...n,
+                ...(position ? { position } : {}),
+                data: { ...n.data, ...dataFields },
+              }
+            : n
+        )
+      );
+    },
+    connectNodes: (sourceId, targetId) => {
+      mustFind(sourceId);
+      mustFind(targetId);
+      if (sourceId === targetId) {
+        throw new Error("A node cannot be connected to itself.");
+      }
+      mutateEdges(
+        (eds) =>
+          addEdge(
+            { source: sourceId, target: targetId, sourceHandle: null, targetHandle: null },
+            eds
+          ) as Edge[]
+      );
+      return `${sourceId}->${targetId}`;
+    },
+    deleteNode: (id) => {
+      mustFind(id);
+      mutateNodes((nds) => nds.filter((n) => n.id !== id));
+      mutateEdges((eds) =>
+        eds.filter((e) => e.source !== id && e.target !== id)
+      );
+    },
+    runWorkflow: () =>
+      execute(nodesRef.current, nodesRef.current, edgesRef.current, "AI: run all"),
+    runNode: (id) => {
+      const node = mustFind(id);
+      return execute(
+        withDownstream(id, nodesRef.current, edgesRef.current),
+        nodesRef.current,
+        edgesRef.current,
+        `AI run: ${(node.data.label as string) ?? id}`
+      );
+    },
+    getRunHistory: (limit) =>
+      activeId ? listRuns(activeId).slice(0, limit) : [],
+    queryDatabase: async (sql) => {
+      const res = await runQuery(sql);
+      return {
+        rows: res.rows.slice(0, 50),
+        rowCount: res.rows.length,
+        truncated: res.rows.length > 50,
+      };
+    },
+  };
+  if (import.meta.env.DEV) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (window as any).__agentApi = agentApiRef;
+  }
+  // --------------------------------------------------------------------------
 
   return (
     <TooltipProvider>
@@ -453,6 +610,14 @@ function CanvasInner({ workflowId }: { workflowId: string }) {
             </DropdownMenu>
 
             <div className="ml-auto flex items-center gap-2">
+              <Button
+                variant={chatOpen ? "secondary" : "outline"}
+                size="sm"
+                onClick={toggleChat}
+              >
+                <Sparkles className="h-4 w-4 text-violet-400" />
+                Assistant
+              </Button>
               <RunHistoryDrawer workflowId={activeId} refreshKey={runsVersion} />
               <TablesPopover />
               <Button size="sm" onClick={runAll} disabled={isRunning}>
@@ -466,24 +631,41 @@ function CanvasInner({ workflowId }: { workflowId: string }) {
             </div>
           </header>
 
-          <div className="min-h-0 flex-1">
-            <ReactFlow
-              nodes={nodes}
-              edges={edges}
-              nodeTypes={nodeTypes}
-              onNodesChange={onNodesChange}
-              onEdgesChange={onEdgesChange}
-              onConnect={onConnect}
-              fitView
-              zoomOnDoubleClick={false}
-              colorMode="dark"
-              proOptions={{ hideAttribution: true }}
-              deleteKeyCode={["Backspace", "Delete"]}
-            >
-              <Background variant={BackgroundVariant.Dots} gap={20} size={1} />
-              <Controls />
-              <MiniMap pannable zoomable className="!bg-card" />
-            </ReactFlow>
+          <div className="flex min-h-0 flex-1">
+            <div className="min-w-0 flex-1">
+              <ReactFlow
+                nodes={nodes}
+                edges={edges}
+                nodeTypes={nodeTypes}
+                onNodesChange={onNodesChange}
+                onEdgesChange={onEdgesChange}
+                onConnect={onConnect}
+                fitView
+                zoomOnDoubleClick={false}
+                colorMode="dark"
+                proOptions={{ hideAttribution: true }}
+                deleteKeyCode={["Backspace", "Delete"]}
+              >
+                <Background variant={BackgroundVariant.Dots} gap={20} size={1} />
+                <Controls />
+                <MiniMap pannable zoomable className="!bg-card" />
+              </ReactFlow>
+            </div>
+            {chatOpen && activeId && (
+              <Suspense
+                fallback={
+                  <aside className="flex w-96 shrink-0 items-center justify-center border-l bg-card">
+                    <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                  </aside>
+                }
+              >
+                <ChatPanel
+                  workflowId={activeId}
+                  agentApiRef={agentApiRef}
+                  onClose={toggleChat}
+                />
+              </Suspense>
+            )}
           </div>
         </div>
       </RunContext.Provider>

@@ -10,7 +10,9 @@ A client-only, node-based data workflow platform. Build graphs of file / script 
 - **shadcn/ui** (Radix base) — dialogs, selects, popovers, dropdowns, alert dialogs, toasts
 - **papaparse** — CSV parsing
 - **CodeMirror** (`@uiw/react-codemirror`) — every code surface (SQL, JS, JSON) is a syntax-highlighted editor
-- Workflow graphs are persisted to **localStorage** (PGlite holds the data tables; the graphs are small JSON, so localStorage keeps them simple)
+- **Vercel AI SDK** (`ai` + `@ai-sdk/react` + `@ai-sdk/openai`) — the chat assistant talks to the OpenAI API straight from the browser, no server
+- **AI Elements** — pre-made chat UI components (conversation, messages, prompt input, tool cards) installed from Vercel's shadcn registry
+- Workflow graphs are persisted to **localStorage** (PGlite holds the data tables; the graphs are small JSON, so localStorage keeps them simple); chat transcripts are persisted to **PGlite** (`chat_messages` table, keyed by workflow)
 
 ## Run
 
@@ -39,6 +41,16 @@ Pushing to `main` triggers `.github/workflows/deploy.yml`, which builds `dist/` 
 | **SQL** | Executes SQL against PGlite. `{{input}}` / `{{input0}}`, `{{input1}}`… placeholders are replaced with upstream node outputs (e.g. SQL built by a script node). |
 | **Visualization** | Runs a SQL query and renders the result as a table, inline preview plus a full-screen dialog. Also supports `{{input}}` templating. |
 
+## AI assistant
+
+The **Assistant** button in the editor toolbar opens a resizable chat panel on the right of the canvas.
+
+- **Bring your own key**: the first time you open it, it asks for an OpenAI API key. The key is encrypted at rest (AES-GCM with a non-extractable WebCrypto key kept in IndexedDB) and is only ever sent to `api.openai.com`. You can replace or forget it from the panel's settings, and pick the model (GPT-5.1 / GPT-5 mini / GPT-4.1 / GPT-4o).
+- **It operates the workflow through tools**: `list_nodes`, `get_node`, `add_node`, `update_node`, `connect_nodes`, `delete_node`, `run_node`, `run_workflow`, `get_run_history`, and `query_database`. It can build node graphs, write the SQL/scripts, execute them, read the errors and fix them — everything it changes appears live on the canvas and is auto-saved. (It can't attach files: create the file node, then pick the file yourself.)
+- **Chat history is per-workflow** and persisted in PGlite, so it survives reloads; clear it with the trash button in the panel header.
+
+Since the whole app is static, the model runs client-side against OpenAI's CORS-enabled API — use a budget-capped project key.
+
 ## How execution works
 
 - **Run all** executes every node in topological order (`src/lib/engine.ts`); cycles are rejected.
@@ -57,9 +69,18 @@ src/
     engine.ts         topo sort + node executors
     file-loader.ts    parser-script runtime + row insertion into PGlite
     workflow-store.ts localStorage persistence of workflows
+    chat-store.ts     chat transcripts in PGlite (per workflow)
+    api-key-store.ts  encrypted OpenAI key (WebCrypto + IndexedDB) + model pref
     types.ts          node data types
+    ai/
+      agent-api.ts    imperative canvas API the chat tools call (via a ref)
+      tools.ts        AI SDK tool definitions (zod schemas)
+      transport.ts    browser-side ChatTransport (streamText, no server)
+      system-prompt.ts
+  components/ai-elements/  chat UI from Vercel's AI Elements registry
   components/workflow/
     canvas.tsx        React Flow canvas, toolbar, workflow switching, run wiring
+    chat-panel.tsx    AI assistant side panel (key gate, chat, settings)
     run-context.tsx   context exposing runNode to nodes
     results-table.tsx query result rendering
     code-editor.tsx         shared CodeMirror wrapper (sql/js/json/text)
@@ -74,3 +95,5 @@ src/
 
 - File contents are stored in the node graph in localStorage — fine for small files, not for big ones (~5 MB localStorage cap).
 - Scripts (node scripts and file parser scripts) run via `new Function` in the page context — not a security sandbox.
+- The OpenAI key is encrypted at rest, but any script running in the page (including node scripts) could use it — inherent to a backend-less app. Use a scoped, budget-capped key.
+- A SQL node can `DROP TABLE chat_messages`; the chat store just recreates it (history is lost, nothing crashes).
