@@ -29,6 +29,11 @@ export interface NodeDetail extends NodeSummary {
   rowCount?: number;
   logs?: string[];
   lastValue?: string;
+  /** form nodes */
+  schemaYaml?: string;
+  values?: Record<string, unknown>;
+  /** group nodes */
+  collapsed?: boolean;
   /** Truncated preview of the last query result. */
   lastResult?: { rows: Record<string, unknown>[]; rowCount: number; truncated: boolean };
 }
@@ -100,6 +105,13 @@ export function detailNode(node: WorkflowNode, edges: Edge[]): NodeDetail {
       detail.logs = data.logs as string[] | undefined;
       detail.lastValue = data.lastValue as string | undefined;
       break;
+    case "form":
+      detail.schemaYaml = data.schemaYaml as string;
+      detail.values = data.values as Record<string, unknown> | undefined;
+      break;
+    case "group":
+      detail.collapsed = data.collapsed as boolean | undefined;
+      break;
   }
 
   const lastResult = data.lastResult as QueryResult | undefined;
@@ -119,6 +131,8 @@ const EDITABLE_FIELDS: Record<WorkflowNodeType, string[]> = {
   sql: ["label", "position", "sql"],
   script: ["label", "position", "code"],
   viz: ["label", "position", "sql"],
+  form: ["label", "position", "schemaYaml", "values"],
+  group: ["label", "position"],
 };
 
 export function assertEditableFields(

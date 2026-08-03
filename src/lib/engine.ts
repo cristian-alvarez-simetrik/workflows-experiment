@@ -6,8 +6,14 @@ import {
   insertRows,
   runParserScript,
 } from "./file-loader";
+import {
+  assertRequiredValues,
+  parseFormSchema,
+  resolveFormValues,
+} from "./form-schema";
 import type {
   FileNodeData,
+  FormNodeData,
   NodeOutput,
   ScriptNodeData,
   SqlNodeData,
@@ -137,6 +143,13 @@ async function executeScriptNode(
   return { output: { kind: "value", value }, logs };
 }
 
+async function executeFormNode(data: FormNodeData): Promise<NodeOutput> {
+  const schema = parseFormSchema(data.schemaYaml);
+  const values = resolveFormValues(schema, data.values ?? {});
+  assertRequiredValues(schema, values);
+  return { kind: "value", value: values };
+}
+
 async function executeVizNode(
   data: VizNodeData,
   inputs: unknown[]
@@ -173,6 +186,8 @@ export async function runNodes(
 
   for (const node of sorted) {
     if (!runSet.has(node.id)) continue;
+    // Group nodes are visual containers — they never execute.
+    if (node.type === "group") continue;
     const upstream = incomingIds(node.id, edges);
     if (upstream.some((id) => failed.has(id))) {
       failed.add(node.id);
@@ -221,6 +236,13 @@ export async function runNodes(
           output = await executeVizNode(node.data as VizNodeData, inputs);
           patch = {
             lastResult: output.kind === "result" ? output.result : undefined,
+          };
+          break;
+        }
+        case "form": {
+          output = await executeFormNode(node.data as FormNodeData);
+          patch = {
+            values: output.kind === "value" ? output.value : undefined,
           };
           break;
         }

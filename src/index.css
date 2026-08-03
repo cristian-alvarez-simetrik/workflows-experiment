@@ -168,3 +168,13 @@
     }
   }
 }
+/* Custom group node: neutralize React Flow's default group styling
+   (padding, centered text, light background) — GroupNode draws its own.
+   Extra specificity: React Flow's stylesheet loads after this file. */
+.react-flow .react-flow__node.react-flow__node-group {
+  padding: 0;
+  text-align: left;
+  border: none;
+  border-radius: 0.75rem;
+  background-color: transparent;
+}

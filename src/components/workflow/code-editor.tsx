@@ -3,14 +3,16 @@ import CodeMirror, { EditorView } from "@uiw/react-codemirror";
 import { javascript } from "@codemirror/lang-javascript";
 import { json } from "@codemirror/lang-json";
 import { sql } from "@codemirror/lang-sql";
+import { yaml } from "@codemirror/lang-yaml";
 import { cn } from "@/lib/utils";
 
-export type CodeLanguage = "sql" | "javascript" | "json" | "text";
+export type CodeLanguage = "sql" | "javascript" | "json" | "yaml" | "text";
 
 const languageExtensions = {
   sql: () => sql(),
   javascript: () => javascript(),
   json: () => json(),
+  yaml: () => yaml(),
   text: () => [],
 };
 

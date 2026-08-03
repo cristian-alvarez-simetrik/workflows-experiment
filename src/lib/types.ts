@@ -53,12 +53,30 @@ export interface VizNodeData extends BaseNodeData {
   lastResult?: QueryResult;
 }
 
+export interface FormNodeData extends BaseNodeData {
+  /** YAML text describing the form fields (see lib/form-schema.ts). */
+  schemaYaml: string;
+  /** Current form values, keyed by field name. */
+  values?: Record<string, unknown>;
+}
+
+export interface GroupNodeData extends BaseNodeData {
+  /** When true, child nodes and their edges are hidden. */
+  collapsed?: boolean;
+  /** Which built-in template created this group, if any. */
+  builtinKind?: string;
+  /** Size to restore when expanding again. */
+  expandedSize?: { width: number; height: number };
+}
+
 export type WorkflowNodeData =
   | FileNodeData
   | SqlNodeData
   | ScriptNodeData
-  | VizNodeData;
+  | VizNodeData
+  | FormNodeData
+  | GroupNodeData;
 
-export type WorkflowNodeType = "file" | "sql" | "script" | "viz";
+export type WorkflowNodeType = "file" | "sql" | "script" | "viz" | "form" | "group";
 
 export type WorkflowNode = Node<WorkflowNodeData, WorkflowNodeType>;

@@ -27,9 +27,9 @@ export function createWorkflowTools(apiRef: AgentApiRef) {
 
     add_node: tool({
       description:
-        "Add a new node to the workflow and return its id. Types: file (load a file into a PGlite table via a parser script — the USER must pick the actual file in the node UI), sql (run SQL against PGlite), script (JavaScript for validations or building SQL for downstream nodes), viz (render a query result as a table).",
+        "Add a new node to the workflow and return its id. Types: file (load a file into a PGlite table via a parser script — the USER must pick the actual file in the node UI), sql (run SQL against PGlite), script (JavaScript for validations or building SQL for downstream nodes), viz (render a query result as a table), form (YAML-defined form whose output is the JSON of the values the user fills in).",
       inputSchema: z.object({
-        type: z.enum(["file", "sql", "script", "viz"]),
+        type: z.enum(["file", "sql", "script", "viz", "form"]),
         label: z.string().optional().describe("Human-friendly node title"),
         position: z
           .object({ x: z.number(), y: z.number() })
@@ -43,7 +43,7 @@ export function createWorkflowTools(apiRef: AgentApiRef) {
 
     update_node: tool({
       description:
-        "Update fields of an existing node. Only include the fields you want to change. 'sql' applies to sql/viz nodes, 'code' to script nodes, 'parserScript'/'tableName' to file nodes, 'label' and 'position' to any node.",
+        "Update fields of an existing node. Only include the fields you want to change. 'sql' applies to sql/viz nodes, 'code' to script nodes, 'parserScript'/'tableName' to file nodes, 'schemaYaml'/'values' to form nodes, 'label' and 'position' to any node.",
       inputSchema: z.object({
         nodeId: z.string(),
         label: z.string().optional(),
@@ -51,6 +51,14 @@ export function createWorkflowTools(apiRef: AgentApiRef) {
         code: z.string().optional(),
         parserScript: z.string().optional(),
         tableName: z.string().optional(),
+        schemaYaml: z
+          .string()
+          .optional()
+          .describe("YAML form schema (form nodes only)"),
+        values: z
+          .record(z.string(), z.unknown())
+          .optional()
+          .describe("Form values keyed by field name (form nodes only)"),
         position: z.object({ x: z.number(), y: z.number() }).optional(),
       }),
       execute: async ({ nodeId, ...fields }) => {

@@ -24,9 +24,13 @@ import {
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import {
+  Boxes,
+  ClipboardList,
   Code2,
+  Columns3,
   Database,
   FileUp,
+  GitCompareArrows,
   Loader2,
   Play,
   Plus,
@@ -53,6 +57,8 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
@@ -77,6 +83,7 @@ import {
   type AgentApi,
   type RunSummary,
 } from "@/lib/ai/agent-api";
+import { BUILTIN_FACTORIES, type BuiltinKind } from "@/lib/builtins";
 import { listTables, runQuery } from "@/lib/db";
 import { runNodes, withDownstream } from "@/lib/engine";
 import { appendRun, listRuns, type RunNodeEntry } from "@/lib/run-history";
@@ -89,7 +96,7 @@ import {
   setActiveWorkflowId,
   type StoredWorkflow,
 } from "@/lib/workflow-store";
-import { FileNode, ScriptNode, SqlNode, VizNode } from "./nodes";
+import { FileNode, FormNode, GroupNode, ScriptNode, SqlNode, VizNode } from "./nodes";
 import { RunContext } from "./run-context";
 import { RunHistoryDrawer } from "./run-history-drawer";
 
@@ -103,7 +110,20 @@ const nodeTypes: NodeTypes = {
   sql: SqlNode,
   script: ScriptNode,
   viz: VizNode,
+  form: FormNode,
+  group: GroupNode,
 };
+
+const DEFAULT_FORM_SCHEMA = `fields:
+  - name: table_name
+    label: Table name
+    type: text
+    required: true
+  - name: limit
+    label: Row limit
+    type: number
+    default: 100
+`;
 
 let nodeCounter = 0;
 
@@ -116,6 +136,13 @@ function makeNode(type: WorkflowNodeType, position: { x: number; y: number }): W
     sql: { ...base, label: `SQL ${nodeCounter}`, sql: "" },
     script: { ...base, label: `Script ${nodeCounter}`, code: "" },
     viz: { ...base, label: `Viz ${nodeCounter}`, sql: "" },
+    form: {
+      ...base,
+      label: `Form ${nodeCounter}`,
+      schemaYaml: DEFAULT_FORM_SCHEMA,
+      values: {},
+    },
+    group: { ...base, label: `Group ${nodeCounter}` },
   }[type];
   return { id, type, position, data };
 }
@@ -251,6 +278,17 @@ function CanvasInner({ workflowId }: { workflowId: string }) {
       y: 100 + (nodes.length % 5) * 70,
     };
     setNodes((nds) => [...nds, makeNode(type, position)]);
+  };
+
+  const addBuiltin = (kind: BuiltinKind) => {
+    const position = {
+      x: 120 + (nodes.length % 4) * 90,
+      y: 100 + (nodes.length % 5) * 70,
+    };
+    const template = BUILTIN_FACTORIES[kind](position);
+    // The group container must precede its children in the nodes array.
+    setNodes((nds) => [...nds, ...template.nodes]);
+    setEdges((eds) => [...eds, ...template.edges] as never[]);
   };
 
   const patchNode = useCallback(
@@ -590,9 +628,16 @@ function CanvasInner({ workflowId }: { workflowId: string }) {
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="start" className="w-80">
+                <DropdownMenuLabel className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                  Native
+                </DropdownMenuLabel>
                 <DropdownMenuItem onClick={() => addNode("file")}>
                   <FileUp className="h-4 w-4 text-amber-400" />
                   File — load csv/json/txt into a table
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => addNode("form")}>
+                  <ClipboardList className="h-4 w-4 text-rose-400" />
+                  Form — YAML-defined inputs, outputs JSON
                 </DropdownMenuItem>
                 <DropdownMenuItem onClick={() => addNode("script")}>
                   <Code2 className="h-4 w-4 text-violet-400" />
@@ -605,6 +650,19 @@ function CanvasInner({ workflowId }: { workflowId: string }) {
                 <DropdownMenuItem onClick={() => addNode("viz")}>
                   <Table2 className="h-4 w-4 text-emerald-400" />
                   Visualization — query results table
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuLabel className="flex items-center gap-1.5 text-[10px] uppercase tracking-wide text-muted-foreground">
+                  <Boxes className="h-3 w-3" />
+                  Built-in
+                </DropdownMenuLabel>
+                <DropdownMenuItem onClick={() => addBuiltin("transformation-column")}>
+                  <Columns3 className="h-4 w-4 text-cyan-400" />
+                  Transformation column — table + computed column
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => addBuiltin("conciliation")}>
+                  <GitCompareArrows className="h-4 w-4 text-orange-400" />
+                  Conciliation — match two tables by sweeps
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
