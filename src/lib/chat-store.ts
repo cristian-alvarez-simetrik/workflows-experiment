@@ -21,6 +21,13 @@ async function ensureSchema() {
   return db;
 }
 
+// PGlite's IndexedDB flush is not awaited by a transaction's COMMIT, so a
+// write followed immediately by a page reload is lost. A trailing query is
+// serialized behind the pending flush and forces it to complete.
+async function flushToIdb(db: Awaited<ReturnType<typeof getDb>>) {
+  await db.query("SELECT 1");
+}
+
 export async function loadChatMessages(
   workflowId: string
 ): Promise<UIMessage[]> {
@@ -59,6 +66,7 @@ export async function saveChatMessages(
       );
     }
   });
+  await flushToIdb(db);
 }
 
 export async function clearChatMessages(workflowId: string): Promise<void> {
@@ -66,4 +74,5 @@ export async function clearChatMessages(workflowId: string): Promise<void> {
   await db.query(`DELETE FROM chat_messages WHERE workflow_id = $1`, [
     workflowId,
   ]);
+  await flushToIdb(db);
 }
