@@ -1,0 +1,6 @@
+monto,date,user_email
+150.00,2026-07-01,1001:alice@example.com
+89.90,2026-07-01,1002:bob@example.com
+42.50,2026-07-02,1003:carol@example.com
+300.00,2026-07-03,1001:alice@example.com
+77.10,2026-07-04,1005:eve@example.com

@@ -1,36 +1,63 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Workflow Studio
 
-## Getting Started
+A client-only, node-based data workflow platform. Build graphs of file / script / SQL / visualization nodes and execute them against a **PGlite** (Postgres in WASM) database running entirely in the browser.
 
-First, run the development server:
+## Stack
+
+- **Next.js 16** (App Router, Turbopack) — everything runs client-side, no backend
+- **@xyflow/react (React Flow)** — node graph editor
+- **@electric-sql/pglite** — in-browser Postgres, persisted to IndexedDB (`idb://workflow-studio`)
+- **shadcn/ui** (Radix base) — dialogs, selects, popovers, dropdowns, alert dialogs, toasts
+- **papaparse** — CSV parsing
+- **CodeMirror** (`@uiw/react-codemirror`) — every code surface (SQL, JS, JSON) is a syntax-highlighted editor
+- Workflow graphs are persisted to **localStorage** (PGlite holds the data tables; the graphs are small JSON, so localStorage keeps them simple)
+
+## Run
 
 ```bash
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Node types
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+| Node | What it does |
+|------|--------------|
+| **File** | Pick a `.csv` / `.json` / `.txt` file. A **parser script** (JS, editable in CodeMirror, defaulted from the file extension) receives `content`, `fileName`, and `parseCsv()` and must return an array of row objects, which are loaded into the target PGlite table (column types inferred). The 👁 button previews the raw file with a format-specific view: CSV as a table, JSON pretty-printed, anything else as plain text. |
+| **Script** | JavaScript (async allowed). In scope: `inputs` (upstream outputs), `input` (first upstream output), `query(sql)` (run SQL against PGlite), `log(...)`. The return value becomes the node's output — return a SQL string to feed a downstream SQL node. |
+| **SQL** | Executes SQL against PGlite. `{{input}}` / `{{input0}}`, `{{input1}}`… placeholders are replaced with upstream node outputs (e.g. SQL built by a script node). |
+| **Visualization** | Runs a SQL query and renders the result as a table, inline preview plus a full-screen dialog. Also supports `{{input}}` templating. |
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## How execution works
 
-## Learn More
+- **Run all** executes every node in topological order (`src/lib/engine.ts`); cycles are rejected.
+- The **play button on a node** runs that node plus everything downstream of it.
+- Node outputs flow along edges: file → table name, sql/viz → result rows, script → its return value.
+- A failed node marks its downstream nodes as skipped.
 
-To learn more about Next.js, take a look at the following resources:
+## Project layout
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+```
+src/
+  lib/
+    db.ts             PGlite singleton + query helpers
+    engine.ts         topo sort + node executors
+    file-loader.ts    parser-script runtime + row insertion into PGlite
+    workflow-store.ts localStorage persistence of workflows
+    types.ts          node data types
+  components/workflow/
+    canvas.tsx        React Flow canvas, toolbar, workflow switching, run wiring
+    run-context.tsx   context exposing runNode to nodes
+    results-table.tsx query result rendering
+    code-editor.tsx         shared CodeMirror wrapper (sql/js/json/text)
+    code-editor-drawer.tsx  expanded CodeMirror editor (side drawer)
+    file-preview-dialog.tsx format-specific file preview (table / json / text)
+    nodes/
+      file-node.tsx / sql-node.tsx / script-node.tsx / viz-node.tsx
+      node-wrapper.tsx  shared node chrome (status, run, delete, handles)
+```
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Known limits (deliberate, this is an experiment)
 
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- File contents are stored in the node graph in localStorage — fine for small files, not for big ones (~5 MB localStorage cap).
+- Scripts (node scripts and file parser scripts) run via `new Function` in the page context — not a security sandbox.
