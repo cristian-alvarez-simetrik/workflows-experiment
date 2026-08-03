@@ -1,3 +1,4 @@
+export { DslNode } from "./dsl-node";
 export { FileNode } from "./file-node";
 export { FormNode } from "./form-node";
 export { GroupNode } from "./group-node";

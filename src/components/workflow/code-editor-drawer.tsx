@@ -102,7 +102,7 @@ export function CodeEditorDrawer({
     // modal={false}: no overlay/blur — the canvas stays visible and usable.
     <Sheet open={open} onOpenChange={setOpen} modal={false}>
       <SheetTrigger asChild>
-        <Button variant="ghost" size="icon" className="h-6 w-6">
+        <Button variant="ghost" size="icon" className="h-6 w-6" title={title}>
           <Maximize2 className="h-3 w-3" />
         </Button>
       </SheetTrigger>

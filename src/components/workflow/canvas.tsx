@@ -29,6 +29,7 @@ import {
   Code2,
   Columns3,
   Database,
+  FileCode2,
   FileUp,
   GitCompareArrows,
   Loader2,
@@ -96,7 +97,15 @@ import {
   setActiveWorkflowId,
   type StoredWorkflow,
 } from "@/lib/workflow-store";
-import { FileNode, FormNode, GroupNode, ScriptNode, SqlNode, VizNode } from "./nodes";
+import {
+  DslNode,
+  FileNode,
+  FormNode,
+  GroupNode,
+  ScriptNode,
+  SqlNode,
+  VizNode,
+} from "./nodes";
 import { RunContext } from "./run-context";
 import { RunHistoryDrawer } from "./run-history-drawer";
 
@@ -110,6 +119,7 @@ const nodeTypes: NodeTypes = {
   sql: SqlNode,
   script: ScriptNode,
   viz: VizNode,
+  dsl: DslNode,
   form: FormNode,
   group: GroupNode,
 };
@@ -136,6 +146,12 @@ function makeNode(type: WorkflowNodeType, position: { x: number; y: number }): W
     sql: { ...base, label: `SQL ${nodeCounter}`, sql: "" },
     script: { ...base, label: `Script ${nodeCounter}`, code: "" },
     viz: { ...base, label: `Viz ${nodeCounter}`, sql: "" },
+    dsl: {
+      ...base,
+      label: `DSL ${nodeCounter}`,
+      dsl: `proceso proceso_${nodeCounter}\n\ndesde banco.crudo.transacciones\n\nescribir depurado.resultado_${nodeCounter}\n    modo reemplazar\n`,
+      paramsJson: "",
+    },
     form: {
       ...base,
       label: `Form ${nodeCounter}`,
@@ -650,6 +666,10 @@ function CanvasInner({ workflowId }: { workflowId: string }) {
                 <DropdownMenuItem onClick={() => addNode("viz")}>
                   <Table2 className="h-4 w-4 text-emerald-400" />
                   Visualization — query results table
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => addNode("dsl")}>
+                  <FileCode2 className="h-4 w-4 text-fuchsia-400" />
+                  DSL — ETL process compiled to SQL
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuLabel className="flex items-center gap-1.5 text-[10px] uppercase tracking-wide text-muted-foreground">

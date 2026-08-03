@@ -32,6 +32,10 @@ export interface NodeDetail extends NodeSummary {
   /** form nodes */
   schemaYaml?: string;
   values?: Record<string, unknown>;
+  /** dsl nodes */
+  dsl?: string;
+  paramsJson?: string;
+  targetTable?: string;
   /** group nodes */
   collapsed?: boolean;
   /** Truncated preview of the last query result. */
@@ -105,6 +109,12 @@ export function detailNode(node: WorkflowNode, edges: Edge[]): NodeDetail {
       detail.logs = data.logs as string[] | undefined;
       detail.lastValue = data.lastValue as string | undefined;
       break;
+    case "dsl":
+      detail.dsl = data.dsl as string;
+      detail.paramsJson = data.paramsJson as string | undefined;
+      detail.targetTable = data.targetTable as string | undefined;
+      detail.rowCount = data.rowCount as number | undefined;
+      break;
     case "form":
       detail.schemaYaml = data.schemaYaml as string;
       detail.values = data.values as Record<string, unknown> | undefined;
@@ -131,6 +141,7 @@ const EDITABLE_FIELDS: Record<WorkflowNodeType, string[]> = {
   sql: ["label", "position", "sql"],
   script: ["label", "position", "code"],
   viz: ["label", "position", "sql"],
+  dsl: ["label", "position", "dsl", "paramsJson"],
   form: ["label", "position", "schemaYaml", "values"],
   group: ["label", "position"],
 };

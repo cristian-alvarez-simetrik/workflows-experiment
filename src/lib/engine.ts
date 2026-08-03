@@ -1,6 +1,9 @@
 
 import type { Edge } from "@xyflow/react";
-import { runQuery } from "./db";
+import { getDb, runQuery } from "./db";
+import { compile } from "./dsl/compile";
+import { execute as executeDslPlan, type ParameterValue } from "./dsl/executor";
+import { PGliteSchemaProvider } from "./dsl/schema-provider";
 import {
   defaultParserScript,
   insertRows,
@@ -12,9 +15,11 @@ import {
   resolveFormValues,
 } from "./form-schema";
 import type {
+  DslNodeData,
   FileNodeData,
   FormNodeData,
   NodeOutput,
+  QueryResult,
   ScriptNodeData,
   SqlNodeData,
   VizNodeData,
@@ -143,6 +148,85 @@ async function executeScriptNode(
   return { output: { kind: "value", value }, logs };
 }
 
+interface DslExecution {
+  output: NodeOutput;
+  targetTable: string;
+  rowCount: number;
+  lastResult: QueryResult;
+}
+
+function parseDslParams(
+  paramsJson: string | undefined
+): Record<string, ParameterValue> {
+  if (!paramsJson?.trim()) return {};
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(paramsJson);
+  } catch {
+    throw new Error("Parameters must be a valid JSON object");
+  }
+  if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
+    throw new Error('Parameters must be a JSON object, e.g. {"fecha": "2026-01-01"}');
+  }
+  const values: Record<string, ParameterValue> = {};
+  for (const [key, value] of Object.entries(parsed)) {
+    if (
+      value !== null &&
+      typeof value !== "string" &&
+      typeof value !== "number" &&
+      typeof value !== "boolean"
+    ) {
+      throw new Error(`Parameter "${key}" must be a string, number, boolean or null`);
+    }
+    values[key] = value as ParameterValue;
+  }
+  return values;
+}
+
+async function executeDslNode(
+  data: DslNodeData,
+  inputs: unknown[]
+): Promise<DslExecution> {
+  // {{input}} placeholders let a DSL node read the table produced upstream:
+  //   desde banco.{{input}}   (a DSL node outputs "schema.table")
+  const source = templateSql(data.dsl, inputs).trim();
+  if (!source) throw new Error("DSL is empty");
+
+  const db = await getDb();
+  const compiled = await compile(source, new PGliteSchemaProvider(db));
+  if (!compiled.ok || !compiled.plan) {
+    const errors = compiled.diagnostics
+      .filter((d) => d.severity === "error")
+      .slice(0, 3)
+      .map(
+        (d) => `${d.code} (línea ${d.range.start.line}): ${d.message}`
+      );
+    throw new Error(errors.join("\n") || "DSL compilation failed");
+  }
+
+  const params = parseDslParams(data.paramsJson);
+  const execution = await executeDslPlan(db, compiled.plan, params);
+  if (!execution.success) {
+    throw new Error(execution.error ?? "DSL execution failed");
+  }
+
+  const targetTable = `${execution.target.schema}.${execution.target.table}`;
+  const preview = await runQuery(
+    `SELECT * FROM "${execution.target.schema}"."${execution.target.table}" LIMIT 50`
+  );
+
+  return {
+    output: {
+      kind: "table",
+      tableName: targetTable,
+      rowCount: execution.rowCount ?? preview.rows.length,
+    },
+    targetTable,
+    rowCount: execution.rowCount ?? preview.rows.length,
+    lastResult: preview,
+  };
+}
+
 async function executeFormNode(data: FormNodeData): Promise<NodeOutput> {
   const schema = parseFormSchema(data.schemaYaml);
   const values = resolveFormValues(schema, data.values ?? {});
@@ -236,6 +320,19 @@ export async function runNodes(
           output = await executeVizNode(node.data as VizNodeData, inputs);
           patch = {
             lastResult: output.kind === "result" ? output.result : undefined,
+          };
+          break;
+        }
+        case "dsl": {
+          const execution = await executeDslNode(
+            node.data as DslNodeData,
+            inputs
+          );
+          output = execution.output;
+          patch = {
+            targetTable: execution.targetTable,
+            rowCount: execution.rowCount,
+            lastResult: execution.lastResult,
           };
           break;
         }

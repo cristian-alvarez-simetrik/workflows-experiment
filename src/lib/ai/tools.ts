@@ -27,9 +27,9 @@ export function createWorkflowTools(apiRef: AgentApiRef) {
 
     add_node: tool({
       description:
-        "Add a new node to the workflow and return its id. Types: file (load a file into a PGlite table via a parser script — the USER must pick the actual file in the node UI), sql (run SQL against PGlite), script (JavaScript for validations or building SQL for downstream nodes), viz (render a query result as a table), form (YAML-defined form whose output is the JSON of the values the user fills in).",
+        "Add a new node to the workflow and return its id. Types: file (load a file into a PGlite table via a parser script — the USER must pick the actual file in the node UI), sql (run SQL against PGlite), script (JavaScript for validations or building SQL for downstream nodes), viz (render a query result as a table), dsl (Spanish ETL DSL compiled to SQL; creates a target table and outputs its schema.table name), form (YAML-defined form whose output is the JSON of the values the user fills in).",
       inputSchema: z.object({
-        type: z.enum(["file", "sql", "script", "viz", "form"]),
+        type: z.enum(["file", "sql", "script", "viz", "dsl", "form"]),
         label: z.string().optional().describe("Human-friendly node title"),
         position: z
           .object({ x: z.number(), y: z.number() })
@@ -43,7 +43,7 @@ export function createWorkflowTools(apiRef: AgentApiRef) {
 
     update_node: tool({
       description:
-        "Update fields of an existing node. Only include the fields you want to change. 'sql' applies to sql/viz nodes, 'code' to script nodes, 'parserScript'/'tableName' to file nodes, 'schemaYaml'/'values' to form nodes, 'label' and 'position' to any node.",
+        "Update fields of an existing node. Only include the fields you want to change. 'sql' applies to sql/viz nodes, 'code' to script nodes, 'parserScript'/'tableName' to file nodes, 'dsl'/'paramsJson' to dsl nodes, 'schemaYaml'/'values' to form nodes, 'label' and 'position' to any node.",
       inputSchema: z.object({
         nodeId: z.string(),
         label: z.string().optional(),
@@ -51,6 +51,14 @@ export function createWorkflowTools(apiRef: AgentApiRef) {
         code: z.string().optional(),
         parserScript: z.string().optional(),
         tableName: z.string().optional(),
+        dsl: z
+          .string()
+          .optional()
+          .describe("ETL DSL source (dsl nodes only)"),
+        paramsJson: z
+          .string()
+          .optional()
+          .describe('JSON object with DSL parameter values (dsl nodes only), e.g. {"fecha_inicio": "2026-01-01"}'),
         schemaYaml: z
           .string()
           .optional()
