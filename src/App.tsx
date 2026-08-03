@@ -1,25 +1,24 @@
-import { useEffect, useState } from "react";
+import { HashRouter, Route, Routes, useParams } from "react-router";
+import { DslPlaygroundPage } from "@/components/dsl/playground";
 import { HomePage } from "@/components/home";
 import { WorkflowCanvas } from "@/components/workflow/canvas";
 
-function useHashRoute(): string {
-  const [hash, setHash] = useState(window.location.hash);
-  useEffect(() => {
-    const onChange = () => setHash(window.location.hash);
-    window.addEventListener("hashchange", onChange);
-    return () => window.removeEventListener("hashchange", onChange);
-  }, []);
-  return hash;
+function WorkflowRoute() {
+  const { id } = useParams<{ id: string }>();
+  // key remounts the canvas when navigating between workflows
+  return <WorkflowCanvas key={id} workflowId={id!} />;
 }
 
-/** Hash routes: "#/" → home, "#/w/<id>" → workflow editor. */
+/** Hash routes: "#/" → home, "#/w/<id>" → workflow editor, "#/dsl" → DSL playground. */
 export default function App() {
-  const hash = useHashRoute();
-  const match = hash.match(/^#\/w\/(.+)$/);
-  if (match) {
-    const id = decodeURIComponent(match[1]);
-    // key remounts the canvas when navigating between workflows
-    return <WorkflowCanvas key={id} workflowId={id} />;
-  }
-  return <HomePage />;
+  return (
+    <HashRouter>
+      <Routes>
+        <Route path="/" element={<HomePage />} />
+        <Route path="/w/:id" element={<WorkflowRoute />} />
+        <Route path="/dsl" element={<DslPlaygroundPage />} />
+        <Route path="*" element={<HomePage />} />
+      </Routes>
+    </HashRouter>
+  );
 }

@@ -1,11 +1,13 @@
 import { useState } from "react";
 import {
   ArrowRight,
+  FileCode2,
   FlaskConical,
   Plus,
   Trash2,
   Workflow,
 } from "lucide-react";
+import { Link } from "react-router";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -86,10 +88,16 @@ export function HomePage() {
         </div>
       </header>
 
-      <section className="mb-10">
+      <section className="mb-10 flex flex-wrap items-center gap-3">
         <Button size="lg" onClick={startEmpty}>
           <Plus className="h-4 w-4" />
           Start a new workflow
+        </Button>
+        <Button size="lg" variant="outline" asChild>
+          <Link to="/dsl">
+            <FileCode2 className="h-4 w-4" />
+            DSL Playground
+          </Link>
         </Button>
       </section>
 
