@@ -4,11 +4,11 @@ import "@fontsource-variable/geist";
 import "@fontsource-variable/geist-mono";
 import "./index.css";
 import { Toaster } from "@/components/ui/sonner";
-import { WorkflowCanvas } from "@/components/workflow/canvas";
+import App from "./App";
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
-    <WorkflowCanvas />
+    <App />
     <Toaster position="bottom-right" />
   </StrictMode>
 );

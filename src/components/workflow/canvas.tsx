@@ -67,7 +67,6 @@ import type { QueryResult, WorkflowNode, WorkflowNodeType } from "@/lib/types";
 import {
   createWorkflow,
   deleteWorkflow,
-  getActiveWorkflowId,
   listWorkflows,
   saveWorkflow,
   setActiveWorkflowId,
@@ -154,7 +153,7 @@ function TablesPopover() {
   );
 }
 
-function CanvasInner() {
+function CanvasInner({ workflowId }: { workflowId: string }) {
   const [nodes, setNodes, onNodesChange] = useNodesState<WorkflowNode>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<never>([]);
   const [workflows, setWorkflows] = useState<StoredWorkflow[]>([]);
@@ -164,23 +163,21 @@ function CanvasInner() {
   const [runsVersion, setRunsVersion] = useState(0);
   const loaded = useRef(false);
 
-  // Load workflows on mount; create a default one if none exist.
+  // Load the workflow given by the route; back to home if it doesn't exist.
   useEffect(() => {
-    let all = listWorkflows();
-    if (all.length === 0) {
-      const wf = createWorkflow("My first workflow");
-      saveWorkflow(wf);
-      all = [wf];
+    const all = listWorkflows();
+    const active = all.find((w) => w.id === workflowId);
+    if (!active) {
+      window.location.hash = "#/";
+      return;
     }
-    const active =
-      all.find((w) => w.id === getActiveWorkflowId()) ?? all[0];
     setWorkflows(all);
     setActiveId(active.id);
     setNodes(active.nodes);
     setEdges(active.edges as never[]);
     setActiveWorkflowId(active.id);
     loaded.current = true;
-  }, [setNodes, setEdges]);
+  }, [workflowId, setNodes, setEdges]);
 
   // Debounced autosave of the active workflow.
   useEffect(() => {
@@ -196,33 +193,21 @@ function CanvasInner() {
 
   const activeWorkflow = workflows.find((w) => w.id === activeId);
 
+  // Navigation goes through the hash router; App remounts the canvas.
   const switchWorkflow = (id: string) => {
-    const wf = listWorkflows().find((w) => w.id === id);
-    if (!wf) return;
-    setActiveId(id);
-    setActiveWorkflowId(id);
-    setNodes(wf.nodes);
-    setEdges(wf.edges as never[]);
+    window.location.hash = `#/w/${id}`;
   };
 
   const addWorkflow = () => {
     const wf = createWorkflow(`Workflow ${listWorkflows().length + 1}`);
     saveWorkflow(wf);
-    setWorkflows(listWorkflows());
     switchWorkflow(wf.id);
   };
 
   const removeWorkflow = () => {
     if (!activeId) return;
     deleteWorkflow(activeId);
-    let all = listWorkflows();
-    if (all.length === 0) {
-      const wf = createWorkflow("My first workflow");
-      saveWorkflow(wf);
-      all = [wf];
-    }
-    setWorkflows(all);
-    switchWorkflow(all[0].id);
+    window.location.hash = "#/";
   };
 
   const renameWorkflow = (name: string) => {
@@ -366,8 +351,14 @@ function CanvasInner() {
       <RunContext.Provider value={runner}>
         <div className="flex h-screen flex-col">
           <header className="flex items-center gap-2 border-b px-4 py-2">
-            <Workflow className="h-5 w-5 text-primary" />
-            <h1 className="mr-2 text-sm font-semibold">Workflow Studio</h1>
+            <button
+              onClick={() => (window.location.hash = "#/")}
+              className="mr-2 flex items-center gap-2 rounded-md px-1 py-0.5 transition-colors hover:bg-accent"
+              title="Back to home"
+            >
+              <Workflow className="h-5 w-5 text-primary" />
+              <h1 className="text-sm font-semibold">Workflow Studio</h1>
+            </button>
 
             {renaming ? (
               <Input
@@ -500,10 +491,10 @@ function CanvasInner() {
   );
 }
 
-export function WorkflowCanvas() {
+export function WorkflowCanvas({ workflowId }: { workflowId: string }) {
   return (
     <ReactFlowProvider>
-      <CanvasInner />
+      <CanvasInner workflowId={workflowId} />
     </ReactFlowProvider>
   );
 }

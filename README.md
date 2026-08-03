@@ -25,6 +25,11 @@ npm run preview   # serve the production build locally
 
 Pushing to `main` triggers `.github/workflows/deploy.yml`, which builds `dist/` and publishes it with the official Pages actions — enable **Settings → Pages → Source: GitHub Actions** in the repo once. Manual alternative: `npm run deploy` (publishes `dist/` to a `gh-pages` branch). The Vite config uses `base: "./"`, so the build works from any subpath.
 
+## Pages
+
+- **Home** (`#/`) — start a new empty workflow, open one of your saved workflows, or launch an **example**. The first example is *Simple conciliation* (the `use_cases/simple_conciliation` scenario, bundled with its CSVs so it runs immediately).
+- **Editor** (`#/w/<id>`) — the node canvas. The logo navigates back home.
+
 ## Node types
 
 | Node | What it does |
