@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useChat } from "@ai-sdk/react";
 import { isStaticToolUIPart, type UIMessage } from "ai";
 import {
@@ -119,7 +119,8 @@ export default function ChatPanel({
       .then((msgs) => {
         if (!cancelled) setInitialMessages(msgs);
       })
-      .catch(() => {
+      .catch((err) => {
+        console.error("[chat-store] failed to load chat history", err);
         if (!cancelled) setInitialMessages([]);
       });
     return () => {
@@ -308,12 +309,24 @@ function ChatBody({
     [tools]
   );
 
+  const persist = useCallback(
+    (msgs: UIMessage[]) => {
+      saveChatMessages(workflowId, msgs).catch((err) => {
+        console.error("[chat-store] failed to save chat history", err);
+        toast.error("Could not save the chat history", {
+          description: err instanceof Error ? err.message : String(err),
+        });
+      });
+    },
+    [workflowId]
+  );
+
   const { messages, sendMessage, status, stop, setMessages, error } = useChat({
     id: `wf-${workflowId}`,
     transport,
     messages: initialMessages,
     onFinish: ({ messages: finished }) => {
-      void saveChatMessages(workflowId, finished);
+      persist(finished);
     },
   });
 
@@ -321,8 +334,8 @@ function ChatBody({
   const messagesRef = useRef(messages);
   messagesRef.current = messages;
   useEffect(() => {
-    if (error) void saveChatMessages(workflowId, messagesRef.current);
-  }, [error, workflowId]);
+    if (error) persist(messagesRef.current);
+  }, [error, persist]);
 
   const changeModel = (value: string) => {
     setModel(value);
