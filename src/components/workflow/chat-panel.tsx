@@ -422,7 +422,9 @@ function ChatBody({
                   }
                   if (isStaticToolUIPart(part)) {
                     return (
-                      <Tool key={i}>
+                      // mb-0: the card's default mb-4 doubles up with the
+                      // message column's gap and spreads the tool list out
+                      <Tool key={i} className="mb-0">
                         <ToolHeader type={part.type} state={part.state} />
                         <ToolContent>
                           <ToolInput input={part.input} />
