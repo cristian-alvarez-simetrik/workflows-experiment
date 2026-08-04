@@ -62,6 +62,15 @@ describe("generación SQL", () => {
     expect(sql).toContain(`UPPER(TRIM("cuenta")) AS "cuenta_normalizada"`);
   });
 
+  it("dividir emite SPLIT_PART", async () => {
+    const sql = await createSql(
+      programWith(
+        `\nagregar columna parte =\n    dividir(cuenta, "-", 2)\n`
+      )
+    );
+    expect(sql).toContain(`SPLIT_PART("cuenta", '-', 2) AS "parte"`);
+  });
+
   it("redondear fuerza NUMERIC para ROUND con escala", async () => {
     const sql = await createSql(
       programWith(

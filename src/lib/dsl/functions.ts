@@ -129,6 +129,27 @@ const definitions: FunctionDefinition[] = [
     emitSql: simpleCall("LENGTH"),
   },
   {
+    name: "dividir",
+    minArgs: 3,
+    maxArgs: 3,
+    validateArguments: (types, nodes) => {
+      const base = checkPositions(types, [textArg, textArg, integerArg]);
+      if (base) return base;
+      const separator = nodes[1];
+      if (separator.type === "StringLiteral" && separator.value === "") {
+        return "el separador no puede ser un texto vacío";
+      }
+      const position = nodes[2];
+      if (position.type === "NumberLiteral" && position.value < 1) {
+        return "la posición debe ser mayor o igual a 1";
+      }
+      return null;
+    },
+    inferReturnType: () => TEXT,
+    // 1-based part index, same as PostgreSQL's SPLIT_PART.
+    emitSql: simpleCall("SPLIT_PART"),
+  },
+  {
     name: "subtexto",
     minArgs: 3,
     maxArgs: 3,

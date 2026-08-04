@@ -131,6 +131,29 @@ escribir depurado.rota
     expect(tables.rows).toHaveLength(0);
   });
 
+  it("dividir separa texto por delimitador con SPLIT_PART", async () => {
+    const result = await compileAndRun(`proceso partes
+
+desde banco.crudo.transacciones
+
+agregar columna sufijo =
+    dividir(recortar(cuenta), "-", 2)
+
+seleccionar
+    id_transaccion,
+    sufijo
+
+escribir depurado.partes
+    modo reemplazar
+`);
+    expect(result.success).toBe(true);
+
+    const rows = await db.query<{ sufijo: string }>(
+      `SELECT sufijo FROM depurado.partes ORDER BY id_transaccion LIMIT 1`
+    );
+    expect(rows.rows[0].sufijo).toBe("001");
+  });
+
   it("reemplaza la tabla destino en ejecuciones sucesivas", async () => {
     const source = `proceso reemplazo
 

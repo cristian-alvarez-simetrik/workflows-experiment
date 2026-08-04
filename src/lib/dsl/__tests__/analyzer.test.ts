@@ -260,6 +260,39 @@ describe("analizador semántico", () => {
     expect(good.plan).toBeDefined();
   });
 
+  it("valida los argumentos de dividir", async () => {
+    const emptySeparator = await analyzeSource(
+      programWith(`\nagregar columna parte =\n    dividir(cuenta, "", 1)\n`)
+    );
+    expect(
+      emptySeparator.diagnostics.some(
+        (d) =>
+          d.code === DiagnosticCodes.BAD_ARGUMENT_TYPE &&
+          d.message.includes("separador")
+      )
+    ).toBe(true);
+
+    const badPosition = await analyzeSource(
+      programWith(`\nagregar columna parte =\n    dividir(cuenta, "-", 0)\n`)
+    );
+    expect(
+      badPosition.diagnostics.some(
+        (d) =>
+          d.code === DiagnosticCodes.BAD_ARGUMENT_TYPE &&
+          d.message.includes("posición")
+      )
+    ).toBe(true);
+
+    const good = await analyzeSource(
+      programWith(`\nagregar columna parte =\n    dividir(cuenta, "-", 1)\n`)
+    );
+    expect(good.plan).toBeDefined();
+    expect(good.plan!.outputSchema.at(-1)).toMatchObject({
+      name: "parte",
+      type: { kind: "text" },
+    });
+  });
+
   it("asigna posiciones de parámetros y reutiliza referencias repetidas", async () => {
     const result = await analyzeSource(
       programWith(

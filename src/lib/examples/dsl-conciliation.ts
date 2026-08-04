@@ -6,14 +6,10 @@ import type { WorkflowNode } from "../types";
 const SYSTEM_PARSER = `// keep every column as string so the join on user_id matches text vs text
 return parseCsv(content, { dynamicTyping: false });`;
 
-// The DSL has no split function, so deriving user_id from the encoded
-// "id:email" belongs to the file node's parser — shaping raw data is its job.
-const BANK_PARSER = `// keep strings + derive user_id from "id:email"
-const rows = parseCsv(content, { dynamicTyping: false });
-return rows.map((r) => ({
-  ...r,
-  user_id: String(r.user_email ?? "").split(":")[0],
-}));`;
+// The parser only loads the CSV as-is; deriving user_id from the encoded
+// "id:email" happens downstream in the DSL with dividir().
+const BANK_PARSER = `// keep every column as string; the DSL derives user_id
+return parseCsv(content, { dynamicTyping: false });`;
 
 const DSL_SYSTEM = `proceso normalizar_sistema
 
@@ -31,12 +27,16 @@ escribir depurado.sistema
     modo reemplazar
 `;
 
+// user_id is extracted from "id:email" with dividir (SPLIT_PART), and
 // id_verificado doubles as validation: if a user_email was malformed, the
 // derived user_id is not numeric, the CAST aborts and the node fails with
 // rollback — same semantics as the script-based validation it replaces.
 const DSL_BANK = `proceso normalizar_banco
 
 desde banco.public.bank_movements
+
+agregar columna user_id =
+    dividir(user_email, ":", 1)
 
 agregar columna id_verificado =
     convertir_entero(user_id)
@@ -142,7 +142,7 @@ export function buildDslConciliationExample(): StoredWorkflow {
         status: "idle",
         dsl: DSL_BANK,
         description:
-          "Valida user_id con convertir_entero (aborta si hay emails malformados) y escribe depurado.banco.",
+          "Extrae user_id de user_email con dividir, lo valida con convertir_entero (aborta si hay emails malformados) y escribe depurado.banco.",
         paramsJson: "",
       },
     },
@@ -179,7 +179,7 @@ export function buildDslConciliationExample(): StoredWorkflow {
 export const dslConciliationMeta = {
   title: "Conciliation with DSL",
   description:
-    "The same reconciliation, rebuilt entirely on DSL nodes: normalize both CSVs, validate with convertir_entero, then LEFT JOIN and classify matches with «unir» — no SQL or script nodes involved.",
+    "The same reconciliation, rebuilt entirely on DSL nodes: plain CSV loads, user_id extracted with «dividir», validated with convertir_entero, then LEFT JOIN and classify matches with «unir» — no SQL or script nodes involved.",
   nodeCount: 5,
   build: buildDslConciliationExample,
 };
