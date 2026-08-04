@@ -83,6 +83,35 @@ const WIDTH_KEY = "workflow-studio:chat-width";
 const MIN_WIDTH = 320;
 const DEFAULT_WIDTH = 400;
 
+const NODE_REF_RE = /@\[([^\]]+)\]\(node:([\w-]+)\)/g;
+
+/**
+ * Renders the input text with @[label](node:id) mentions as violet pills,
+ * dimming the syntax around the label. Painted on a backdrop div that sits
+ * behind the (transparent-text) textarea, so every character must stay 1:1
+ * with the raw value — colors only, no size or spacing changes.
+ */
+function highlightNodeRefs(text: string): React.ReactNode {
+  const out: React.ReactNode[] = [];
+  let last = 0;
+  for (const m of text.matchAll(NODE_REF_RE)) {
+    if (m.index > last) out.push(text.slice(last, m.index));
+    out.push(
+      <span
+        key={`${m.index}-${m[2]}`}
+        className="rounded-sm bg-violet-500/20 text-violet-300"
+      >
+        <span className="text-violet-300/40">@[</span>
+        {m[1]}
+        <span className="text-violet-300/40">{`](node:${m[2]})`}</span>
+      </span>
+    );
+    last = m.index + m[0].length;
+  }
+  out.push(text.slice(last));
+  return out;
+}
+
 function clampWidth(width: number): number {
   return Math.min(Math.max(width, MIN_WIDTH), window.innerWidth * 0.5);
 }
@@ -325,6 +354,7 @@ function ChatBody({
   // Controlled so node "Add to chat" references can be appended from outside.
   const [input, setInput] = useState("");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const backdropRef = useRef<HTMLDivElement>(null);
   useEffect(
     () =>
       subscribeChatRefs((ref) => {
@@ -476,12 +506,31 @@ function ChatBody({
           }}
         >
           <PromptInputBody>
-            <PromptInputTextarea
-              ref={textareaRef}
-              placeholder="Ask the assistant…"
-              value={input}
-              onChange={(e) => setInput(e.currentTarget.value)}
-            />
+            {/* Highlight backdrop: same box and font metrics as the textarea,
+                which renders transparent text on top of it. */}
+            <div className="relative w-full">
+              <div
+                ref={backdropRef}
+                aria-hidden="true"
+                className="pointer-events-none absolute inset-0 overflow-hidden whitespace-pre-wrap break-words px-2.5 py-2 text-base md:text-sm"
+              >
+                {highlightNodeRefs(input)}
+                {/* keeps a trailing newline from collapsing in the backdrop */}
+                {"\u200b"}
+              </div>
+              <PromptInputTextarea
+                ref={textareaRef}
+                placeholder="Ask the assistant…"
+                value={input}
+                onChange={(e) => setInput(e.currentTarget.value)}
+                onScroll={(e) => {
+                  if (backdropRef.current) {
+                    backdropRef.current.scrollTop = e.currentTarget.scrollTop;
+                  }
+                }}
+                className="relative text-transparent caret-foreground"
+              />
+            </div>
           </PromptInputBody>
           <PromptInputFooter>
             <PromptInputSubmit
