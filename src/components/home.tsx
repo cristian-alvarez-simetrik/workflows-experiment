@@ -27,8 +27,10 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
+import { isAdvancedMode, setAdvancedMode } from "@/lib/app-settings";
 import { dslConciliationMeta } from "@/lib/examples/dsl-conciliation";
-import { simpleConciliationMeta } from "@/lib/examples/simple-conciliation";
 import {
   createWorkflow,
   deleteWorkflow,
@@ -37,7 +39,7 @@ import {
   type StoredWorkflow,
 } from "@/lib/workflow-store";
 
-const EXAMPLES = [simpleConciliationMeta, dslConciliationMeta];
+const EXAMPLES = [dslConciliationMeta];
 
 function openWorkflow(id: string) {
   window.location.hash = `#/w/${id}`;
@@ -56,6 +58,12 @@ export function HomePage() {
   const [workflows, setWorkflows] = useState<StoredWorkflow[]>(() =>
     [...listWorkflows()].sort((a, b) => b.updatedAt - a.updatedAt)
   );
+  const [advanced, setAdvanced] = useState(isAdvancedMode);
+
+  const toggleAdvanced = (enabled: boolean) => {
+    setAdvancedMode(enabled);
+    setAdvanced(enabled);
+  };
 
   const startEmpty = () => {
     const wf = createWorkflow("Untitled workflow");
@@ -100,6 +108,22 @@ export function HomePage() {
             DSL Playground
           </Link>
         </Button>
+        <div className="ml-auto flex items-center gap-2">
+          <Switch
+            id="advanced-mode"
+            checked={advanced}
+            onCheckedChange={toggleAdvanced}
+          />
+          <Label
+            htmlFor="advanced-mode"
+            className="flex flex-col items-start gap-0 text-sm font-normal"
+          >
+            Advanced mode
+            <span className="text-xs text-muted-foreground">
+              Enables all node types (SQL, Script, Viz, Form)
+            </span>
+          </Label>
+        </div>
       </section>
 
       <section className="mb-10">

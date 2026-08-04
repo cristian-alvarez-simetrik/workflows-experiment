@@ -84,6 +84,7 @@ import {
   type AgentApi,
   type RunSummary,
 } from "@/lib/ai/agent-api";
+import { isAdvancedMode } from "@/lib/app-settings";
 import { BUILTIN_FACTORIES, type BuiltinKind } from "@/lib/builtins";
 import { listTables, runQuery } from "@/lib/db";
 import { runNodes, withDownstream } from "@/lib/engine";
@@ -228,6 +229,8 @@ function CanvasInner({ workflowId }: { workflowId: string }) {
   const [renaming, setRenaming] = useState(false);
   const [runsVersion, setRunsVersion] = useState(0);
   const loaded = useRef(false);
+  // Set on the home page; the canvas only reads it (remounts on navigation).
+  const advancedMode = isAdvancedMode();
 
   // Load the workflow given by the route; back to home if it doesn't exist.
   useEffect(() => {
@@ -652,39 +655,45 @@ function CanvasInner({ workflowId }: { workflowId: string }) {
                   <FileUp className="h-4 w-4 text-amber-400" />
                   File — load csv/json/txt into a table
                 </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => addNode("form")}>
-                  <ClipboardList className="h-4 w-4 text-rose-400" />
-                  Form — YAML-defined inputs, outputs JSON
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => addNode("script")}>
-                  <Code2 className="h-4 w-4 text-violet-400" />
-                  Script — validations, build SQL
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => addNode("sql")}>
-                  <Database className="h-4 w-4 text-sky-400" />
-                  SQL — execute against PGlite
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => addNode("viz")}>
-                  <Table2 className="h-4 w-4 text-emerald-400" />
-                  Visualization — query results table
-                </DropdownMenuItem>
                 <DropdownMenuItem onClick={() => addNode("dsl")}>
                   <FileCode2 className="h-4 w-4 text-fuchsia-400" />
                   DSL — ETL process compiled to SQL
                 </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuLabel className="flex items-center gap-1.5 text-[10px] uppercase tracking-wide text-muted-foreground">
-                  <Boxes className="h-3 w-3" />
-                  Built-in
-                </DropdownMenuLabel>
-                <DropdownMenuItem onClick={() => addBuiltin("transformation-column")}>
-                  <Columns3 className="h-4 w-4 text-cyan-400" />
-                  Transformation column — table + computed column
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => addBuiltin("conciliation")}>
-                  <GitCompareArrows className="h-4 w-4 text-orange-400" />
-                  Conciliation — match two tables by sweeps
-                </DropdownMenuItem>
+                {advancedMode && (
+                  <>
+                    <DropdownMenuItem onClick={() => addNode("form")}>
+                      <ClipboardList className="h-4 w-4 text-rose-400" />
+                      Form — YAML-defined inputs, outputs JSON
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => addNode("script")}>
+                      <Code2 className="h-4 w-4 text-violet-400" />
+                      Script — validations, build SQL
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => addNode("sql")}>
+                      <Database className="h-4 w-4 text-sky-400" />
+                      SQL — execute against PGlite
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => addNode("viz")}>
+                      <Table2 className="h-4 w-4 text-emerald-400" />
+                      Visualization — query results table
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuLabel className="flex items-center gap-1.5 text-[10px] uppercase tracking-wide text-muted-foreground">
+                      <Boxes className="h-3 w-3" />
+                      Built-in
+                    </DropdownMenuLabel>
+                    <DropdownMenuItem
+                      onClick={() => addBuiltin("transformation-column")}
+                    >
+                      <Columns3 className="h-4 w-4 text-cyan-400" />
+                      Transformation column — table + computed column
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => addBuiltin("conciliation")}>
+                      <GitCompareArrows className="h-4 w-4 text-orange-400" />
+                      Conciliation — match two tables by sweeps
+                    </DropdownMenuItem>
+                  </>
+                )}
               </DropdownMenuContent>
             </DropdownMenu>
 

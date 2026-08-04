@@ -1,6 +1,18 @@
 import { tool } from "ai";
 import { z } from "zod";
+import { enabledNodeTypes } from "../app-settings";
+import type { WorkflowNodeType } from "../types";
 import type { AgentApiRef } from "./agent-api";
+
+/** Short add_node blurb per creatable node type. */
+const NODE_TYPE_BLURBS: Partial<Record<WorkflowNodeType, string>> = {
+  file: "file (load a file into a PGlite table via a parser script — the USER must pick the actual file in the node UI)",
+  sql: "sql (run SQL against PGlite)",
+  script: "script (JavaScript for validations or building SQL for downstream nodes)",
+  viz: "viz (render a query result as a table)",
+  dsl: "dsl (Spanish ETL DSL compiled to SQL; creates a target table and outputs its schema.table name)",
+  form: "form (YAML-defined form whose output is the JSON of the values the user fills in)",
+};
 
 /**
  * Workflow tools for the chat agent. Created once per panel mount; every
@@ -9,6 +21,9 @@ import type { AgentApiRef } from "./agent-api";
  */
 export function createWorkflowTools(apiRef: AgentApiRef) {
   const api = () => apiRef.current;
+
+  // Basic mode exposes only file + dsl; advanced mode everything.
+  const creatable = enabledNodeTypes();
 
   return {
     list_nodes: tool({
@@ -26,19 +41,26 @@ export function createWorkflowTools(apiRef: AgentApiRef) {
     }),
 
     add_node: tool({
-      description:
-        "Add a new node to the workflow and return its id. Types: file (load a file into a PGlite table via a parser script — the USER must pick the actual file in the node UI), sql (run SQL against PGlite), script (JavaScript for validations or building SQL for downstream nodes), viz (render a query result as a table), dsl (Spanish ETL DSL compiled to SQL; creates a target table and outputs its schema.table name), form (YAML-defined form whose output is the JSON of the values the user fills in).",
+      description: `Add a new node to the workflow and return its id. Types: ${creatable
+        .map((t) => NODE_TYPE_BLURBS[t])
+        .filter(Boolean)
+        .join(", ")}.`,
       inputSchema: z.object({
-        type: z.enum(["file", "sql", "script", "viz", "dsl", "form"]),
+        type: z.enum(creatable as [WorkflowNodeType, ...WorkflowNodeType[]]),
         label: z.string().optional().describe("Human-friendly node title"),
         position: z
           .object({ x: z.number(), y: z.number() })
           .optional()
           .describe("Canvas position; omit to auto-place"),
       }),
-      execute: async ({ type, label, position }) => ({
-        nodeId: api().addNode(type, label, position),
-      }),
+      execute: async ({ type, label, position }) => {
+        if (!enabledNodeTypes().includes(type)) {
+          throw new Error(
+            `Node type "${type}" is not enabled — the user must turn on advanced mode on the home page first.`
+          );
+        }
+        return { nodeId: api().addNode(type, label, position) };
+      },
     }),
 
     update_node: tool({

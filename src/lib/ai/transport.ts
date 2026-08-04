@@ -9,7 +9,7 @@ import {
   type UIMessageChunk,
 } from "ai";
 import { createOpenAI } from "@ai-sdk/openai";
-import { SYSTEM_PROMPT } from "./system-prompt";
+import { buildSystemPrompt } from "./system-prompt";
 import type { WorkflowTools } from "./tools";
 
 export interface ChatTransportOptions {
@@ -41,7 +41,7 @@ export function createChatTransport(
       const tools = opts.tools as unknown as ToolSet;
       const result = streamText({
         model: openai(opts.getModel()),
-        system: SYSTEM_PROMPT,
+        system: buildSystemPrompt(),
         messages: await convertToModelMessages(messages, { tools }),
         tools,
         stopWhen: isStepCount(20),
