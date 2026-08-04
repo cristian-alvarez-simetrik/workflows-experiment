@@ -1,7 +1,9 @@
+import { useState } from "react";
 import { useReactFlow, type NodeProps } from "@xyflow/react";
-import { FileCode2, Table2 } from "lucide-react";
+import { ChevronDown, ChevronUp, FileCode2, Table2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Dialog,
   DialogContent,
@@ -30,6 +32,7 @@ export function DslNode({ id, data, selected }: NodeProps) {
   const nodeData = data as DslNodeData;
   const { updateNodeData } = useReactFlow();
   const result = nodeData.lastResult;
+  const [previewCollapsed, setPreviewCollapsed] = useState(false);
 
   return (
     <NodeWrapper
@@ -81,13 +84,11 @@ export function DslNode({ id, data, selected }: NodeProps) {
       }
     >
       <div className="nodrag nowheel space-y-2">
-        <CodeEditor
-          value={nodeData.dsl}
-          language="text"
-          onChange={(dsl) => updateNodeData(id, { dsl })}
-          placeholder={DSL_PLACEHOLDER}
-          minHeight="6rem"
-          maxHeight="12rem"
+        <Textarea
+          value={nodeData.description ?? ""}
+          onChange={(e) => updateNodeData(id, { description: e.target.value })}
+          placeholder="Describe qué hace este proceso… (el DSL se edita con el botón de expandir)"
+          className="min-h-14 resize-none border-none bg-transparent p-1 text-xs leading-snug text-muted-foreground shadow-none focus-visible:ring-1 dark:bg-transparent"
         />
         {declaresParameters(nodeData.dsl) && (
           <div className="space-y-1">
@@ -113,10 +114,27 @@ export function DslNode({ id, data, selected }: NodeProps) {
               <Badge variant="secondary" className="font-mono text-[10px]">
                 {nodeData.rowCount ?? result.rows.length} rows
               </Badge>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="ml-auto h-5 w-5"
+                title={
+                  previewCollapsed ? "Mostrar tabla resultado" : "Ocultar tabla resultado"
+                }
+                onClick={() => setPreviewCollapsed((c) => !c)}
+              >
+                {previewCollapsed ? (
+                  <ChevronDown className="h-3 w-3" />
+                ) : (
+                  <ChevronUp className="h-3 w-3" />
+                )}
+              </Button>
             </div>
-            <div className="max-h-48 overflow-auto">
-              <ResultsTable result={result} maxRows={8} />
-            </div>
+            {!previewCollapsed && (
+              <div className="max-h-48 overflow-auto">
+                <ResultsTable result={result} maxRows={8} />
+              </div>
+            )}
           </div>
         ) : (
           <p className="text-[10px] text-muted-foreground">

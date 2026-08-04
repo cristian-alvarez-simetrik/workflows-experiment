@@ -43,7 +43,7 @@ export function createWorkflowTools(apiRef: AgentApiRef) {
 
     update_node: tool({
       description:
-        "Update fields of an existing node. Only include the fields you want to change. 'sql' applies to sql/viz nodes, 'code' to script nodes, 'parserScript'/'tableName' to file nodes, 'dsl'/'paramsJson' to dsl nodes, 'schemaYaml'/'values' to form nodes, 'label' and 'position' to any node.",
+        "Update fields of an existing node. Only include the fields you want to change. 'sql' applies to sql/viz nodes, 'code' to script nodes, 'parserScript'/'tableName' to file nodes, 'dsl'/'description'/'paramsJson' to dsl nodes, 'schemaYaml'/'values' to form nodes, 'label' and 'position' to any node.",
       inputSchema: z.object({
         nodeId: z.string(),
         label: z.string().optional(),
@@ -55,6 +55,12 @@ export function createWorkflowTools(apiRef: AgentApiRef) {
           .string()
           .optional()
           .describe("ETL DSL source (dsl nodes only)"),
+        description: z
+          .string()
+          .optional()
+          .describe(
+            "Short human-readable summary shown on the node card (dsl nodes only)"
+          ),
         paramsJson: z
           .string()
           .optional()

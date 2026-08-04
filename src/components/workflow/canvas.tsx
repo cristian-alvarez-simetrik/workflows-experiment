@@ -150,6 +150,7 @@ function makeNode(type: WorkflowNodeType, position: { x: number; y: number }): W
       ...base,
       label: `DSL ${nodeCounter}`,
       dsl: `proceso proceso_${nodeCounter}\n\ndesde banco.crudo.transacciones\n\nescribir depurado.resultado_${nodeCounter}\n    modo reemplazar\n`,
+      description: "",
       paramsJson: "",
     },
     form: {

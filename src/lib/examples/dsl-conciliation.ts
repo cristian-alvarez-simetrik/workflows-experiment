@@ -128,6 +128,8 @@ export function buildDslConciliationExample(): StoredWorkflow {
         label: "DSL: normalizar sistema",
         status: "idle",
         dsl: DSL_SYSTEM,
+        description:
+          "Convierte amount a decimal y escribe depurado.sistema con user_id, fecha y monto_sistema.",
         paramsJson: "",
       },
     },
@@ -139,6 +141,8 @@ export function buildDslConciliationExample(): StoredWorkflow {
         label: "DSL: validar + normalizar banco",
         status: "idle",
         dsl: DSL_BANK,
+        description:
+          "Valida user_id con convertir_entero (aborta si hay emails malformados) y escribe depurado.banco.",
         paramsJson: "",
       },
     },
@@ -150,6 +154,8 @@ export function buildDslConciliationExample(): StoredWorkflow {
         label: "DSL: unir y clasificar",
         status: "idle",
         dsl: DSL_CLASSIFY,
+        description:
+          "LEFT JOIN sistema × banco por usuario y fecha; clasifica cada fila en CONCILIADO, DESCUADRE o FALTANTE_EN_BANCO.",
         paramsJson: "",
       },
     },

@@ -8,7 +8,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { defaultParserScript, sanitizeIdentifier } from "@/lib/file-loader";
 import type { FileNodeData } from "@/lib/types";
-import { CodeEditor } from "../code-editor";
 import { CodeEditorDrawer } from "../code-editor-drawer";
 import { FilePreviewDialog } from "../file-preview-dialog";
 import { NodeWrapper } from "./node-wrapper";
@@ -105,21 +104,6 @@ export function FileNode({ id, data, selected }: NodeProps) {
                       sanitizeIdentifier(e.target.value) || e.target.value,
                   })
                 }
-              />
-            </div>
-            <div className="space-y-1">
-              <Label className="text-xs text-muted-foreground">
-                Parser script
-              </Label>
-              <CodeEditor
-                value={nodeData.parserScript ?? ""}
-                language="javascript"
-                onChange={(parserScript) =>
-                  updateNodeData(id, { parserScript })
-                }
-                placeholder="return parseCsv(content);"
-                minHeight="4rem"
-                maxHeight="9rem"
               />
             </div>
             {nodeData.rowCount !== undefined && (

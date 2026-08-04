@@ -56,6 +56,8 @@ export interface VizNodeData extends BaseNodeData {
 export interface DslNodeData extends BaseNodeData {
   /** ETL DSL source (see src/lib/dsl). Supports {{input}} placeholders. */
   dsl: string;
+  /** Human-readable summary shown on the node card (the DSL lives in the drawer). */
+  description?: string;
   /** Optional JSON object with parameter values: {"fecha_inicio": "2026-01-01"}. */
   paramsJson?: string;
   /** schema.table created by the last run. */
