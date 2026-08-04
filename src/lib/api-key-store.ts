@@ -117,16 +117,18 @@ export async function hasApiKey(): Promise<boolean> {
 const MODEL_KEY = "workflow-studio:ai-model";
 
 export const AI_MODELS = [
+  { id: "gpt-5.6-terra", label: "GPT-5.6 Terra" },
+  { id: "gpt-5.6-luna", label: "GPT-5.6 Luna" },
   { id: "gpt-5.1", label: "GPT-5.1" },
-  { id: "gpt-5-mini", label: "GPT-5 mini" },
-  { id: "gpt-4.1", label: "GPT-4.1" },
-  { id: "gpt-4o", label: "GPT-4o" },
 ] as const;
 
-export const DEFAULT_MODEL = "gpt-5-mini";
+export const DEFAULT_MODEL = "gpt-5.6-terra";
 
 export function getStoredModel(): string {
-  return localStorage.getItem(MODEL_KEY) ?? DEFAULT_MODEL;
+  const stored = localStorage.getItem(MODEL_KEY);
+  // Stored preferences may point at retired models — fall back to the default.
+  if (stored && AI_MODELS.some((m) => m.id === stored)) return stored;
+  return DEFAULT_MODEL;
 }
 
 export function setStoredModel(model: string): void {
