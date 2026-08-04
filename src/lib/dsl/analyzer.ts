@@ -4,6 +4,7 @@
  */
 
 import type {
+  ColumnReferenceNode,
   ExpressionNode,
   ParameterDeclarationNode,
   ProgramNode,
@@ -12,6 +13,7 @@ import { Diagnostic, DiagnosticCodes, SourceRange } from "./diagnostics";
 import { getFunction } from "./functions";
 import type {
   CompiledParameter,
+  JoinColumnMapping,
   LogicalColumn,
   LogicalPlan,
   LogicalPlanNode,
@@ -47,9 +49,24 @@ interface ParameterInfo {
   referenced: boolean;
 }
 
+/** One column visible at some point of the pipeline. */
+interface EnvColumn {
+  /** Table alias the column comes from; undefined for "agregar columna". */
+  alias?: string;
+  /** Name as the user wrote it (base name within its table). */
+  name: string;
+  /** Unique flat SQL name at this point (collisions become alias_columna). */
+  flatName: string;
+  type: SemanticType;
+  nullable: boolean;
+  /** Set only while typing a join condition. */
+  side?: "left" | "right";
+}
+
 export function analyze(
   program: ProgramNode,
-  sourceSchema: TableSchema
+  sourceSchema: TableSchema,
+  joinSchemas: TableSchema[] = []
 ): AnalysisResult {
   const diagnostics: Diagnostic[] = [];
 
@@ -117,14 +134,83 @@ export function analyze(
   // Column environment (updated step by step)
   // -------------------------------------------------------------------------
 
-  let columns: LogicalColumn[] = sourceSchema.columns.map((c) => ({
+  const sourceAlias = program.source.alias ?? program.source.table;
+
+  let env: EnvColumn[] = sourceSchema.columns.map((c) => ({
+    alias: sourceAlias,
     name: c.name,
+    flatName: c.name,
     type: c.type,
     nullable: c.nullable,
   }));
 
-  const findColumn = (name: string): LogicalColumn | undefined =>
-    columns.find((c) => c.name === name);
+  /** While typing a join condition, resolution happens against this instead. */
+  let joinConditionEnv: EnvColumn[] | undefined;
+
+  const activeEnv = (): EnvColumn[] => joinConditionEnv ?? env;
+
+  const envToSchema = (): LogicalColumn[] =>
+    env.map((e) => ({ name: e.flatName, type: e.type, nullable: e.nullable }));
+
+  const describeAliases = (): string =>
+    [...new Set(activeEnv().map((e) => e.alias).filter(Boolean))].join(", ");
+
+  /**
+   * Resolves a (possibly qualified) column reference against the active
+   * environment, reporting the corresponding diagnostic when it fails.
+   */
+  const resolveColumn = (
+    node: ColumnReferenceNode,
+    context: "expression" | "select" = "expression"
+  ): EnvColumn | undefined => {
+    const entries = activeEnv();
+    if (node.qualifier) {
+      const withAlias = entries.filter((e) => e.alias === node.qualifier);
+      if (withAlias.length === 0) {
+        error(
+          DiagnosticCodes.UNKNOWN_ALIAS,
+          `El alias "${node.qualifier}" no está definido.`,
+          node.range,
+          `Alias disponibles: ${describeAliases()}.`
+        );
+        return undefined;
+      }
+      const found = withAlias.find((e) => e.name === node.name);
+      if (!found) {
+        error(
+          DiagnosticCodes.UNKNOWN_COLUMN,
+          `La columna "${node.name}" no existe en la tabla con alias "${node.qualifier}".`,
+          node.range
+        );
+      }
+      return found;
+    }
+    const byName = entries.filter((e) => e.name === node.name);
+    if (byName.length === 1) return byName[0];
+    if (byName.length > 1) {
+      const aliases = byName.map((e) => `"${e.alias}"`).join(" y ");
+      error(
+        DiagnosticCodes.AMBIGUOUS_COLUMN,
+        `La columna "${node.name}" es ambigua: existe en ${aliases}.`,
+        node.range,
+        `Califíquela con su alias, por ejemplo ${byName[0].alias}.${node.name}.`
+      );
+      return undefined;
+    }
+    const byFlat = entries.find((e) => e.flatName === node.name);
+    if (byFlat) return byFlat;
+    error(
+      DiagnosticCodes.UNKNOWN_COLUMN,
+      context === "select"
+        ? `La columna "${node.name}" no existe en el esquema actual.`
+        : `La columna "${node.name}" no existe en este punto del proceso.`,
+      node.range,
+      context === "select"
+        ? undefined
+        : "La columna todavía no ha sido creada o no pertenece a la tabla fuente."
+    );
+    return undefined;
+  };
 
   // -------------------------------------------------------------------------
   // Expression typing
@@ -146,17 +232,16 @@ export function analyze(
         return { kind: "null-literal", type: NULL };
 
       case "ColumnReference": {
-        const column = findColumn(node.name);
-        if (!column) {
-          error(
-            DiagnosticCodes.UNKNOWN_COLUMN,
-            `La columna "${node.name}" no existe en este punto del proceso.`,
-            node.range,
-            "La columna todavía no ha sido creada o no pertenece a la tabla fuente."
-          );
+        const entry = resolveColumn(node);
+        if (!entry) {
           return { kind: "column", name: node.name, type: UNKNOWN };
         }
-        return { kind: "column", name: node.name, type: column.type };
+        return {
+          kind: "column",
+          name: entry.flatName,
+          type: entry.type,
+          ...(entry.side ? { joinSide: entry.side } : {}),
+        };
       }
 
       case "ParameterReference": {
@@ -274,7 +359,7 @@ export function analyze(
             DiagnosticCodes.UNKNOWN_FUNCTION,
             `La función "${node.name}" no existe.`,
             node.range,
-            "Solo pueden usarse las funciones registradas en la versión 0.1."
+            "Solo pueden usarse las funciones registradas en la versión 0.2."
           );
           return {
             kind: "function-call",
@@ -387,8 +472,102 @@ export function analyze(
     connection: program.source.connection,
     schema: program.source.schema,
     table: program.source.table,
-    outputSchema: [...columns],
+    outputSchema: envToSchema(),
   };
+
+  // Joins (right after "desde", enforced by the parser).
+  const seenAliases = new Set([sourceAlias]);
+  program.joins.forEach((join, joinIndex) => {
+    const rightSchema = joinSchemas[joinIndex];
+    if (!rightSchema) return; // compile() already reported the missing table
+    for (const note of rightSchema.warnings) {
+      warning(DiagnosticCodes.UNKNOWN_SOURCE_TYPE, note, join.range);
+    }
+    if (seenAliases.has(join.alias)) {
+      error(
+        DiagnosticCodes.DUPLICATE_ALIAS,
+        `El alias "${join.alias}" ya está en uso.`,
+        join.aliasRange,
+        "Cada tabla del proceso debe tener un alias distinto."
+      );
+    }
+    seenAliases.add(join.alias);
+
+    const rightColumns: EnvColumn[] = rightSchema.columns.map((c) => ({
+      alias: join.alias,
+      name: c.name,
+      flatName: c.name,
+      type: c.type,
+      nullable: c.nullable,
+    }));
+
+    // The condition sees both sides; column refs are tagged with their side
+    // so the SQL compiler can qualify them inside the ON clause.
+    joinConditionEnv = [
+      ...env.map((e) => ({ ...e, side: "left" as const })),
+      ...rightColumns.map((e) => ({ ...e, side: "right" as const })),
+    ];
+    const condition = typeExpression(join.condition);
+    joinConditionEnv = undefined;
+    if (condition.type.kind !== "boolean" && !isFlexible(condition.type)) {
+      error(
+        DiagnosticCodes.JOIN_NOT_BOOLEAN,
+        `La condición "en" de la instrucción "unir" debe ser booleana, pero se obtuvo ${aOrUn(condition.type)}.`,
+        join.condition.range
+      );
+    }
+
+    // Outer joins introduce NULLs on the non-preserved side.
+    const leftNullable = join.joinType === "right" || join.joinType === "full";
+    const rightNullable = join.joinType === "left" || join.joinType === "full";
+
+    // Flatten both sides into unique output names: names that collide are
+    // renamed to alias_columna; the rest keep their name.
+    const combined = [
+      ...env.map((e) => ({
+        entry: e,
+        side: "left" as const,
+        sourceName: e.flatName,
+        nullable: e.nullable || leftNullable,
+      })),
+      ...rightColumns.map((e) => ({
+        entry: e,
+        side: "right" as const,
+        sourceName: e.name,
+        nullable: e.nullable || rightNullable,
+      })),
+    ];
+    const counts = new Map<string, number>();
+    for (const c of combined) {
+      counts.set(c.sourceName, (counts.get(c.sourceName) ?? 0) + 1);
+    }
+    const used = new Set<string>();
+    const mappings: JoinColumnMapping[] = [];
+    const nextEnv: EnvColumn[] = [];
+    for (const c of combined) {
+      let output =
+        (counts.get(c.sourceName) ?? 0) > 1
+          ? `${c.entry.alias}_${c.entry.name}`
+          : c.sourceName;
+      while (used.has(output)) output = `${output}_2`;
+      used.add(output);
+      mappings.push({ side: c.side, sourceName: c.sourceName, outputName: output });
+      nextEnv.push({ ...c.entry, flatName: output, nullable: c.nullable });
+    }
+    env = nextEnv;
+
+    root = {
+      type: "Join",
+      input: root,
+      joinType: join.joinType,
+      schema: join.schema,
+      table: join.table,
+      alias: join.alias,
+      condition,
+      columns: mappings,
+      outputSchema: envToSchema(),
+    };
+  });
 
   for (const operation of program.operations) {
     if (operation.type === "Filter") {
@@ -404,11 +583,13 @@ export function analyze(
         type: "Filter",
         input: root,
         condition,
-        outputSchema: [...columns],
+        outputSchema: envToSchema(),
       };
     } else {
       // AddColumn
-      const existing = findColumn(operation.name);
+      const existing = env.some(
+        (e) => e.name === operation.name || e.flatName === operation.name
+      );
       if (existing) {
         error(
           DiagnosticCodes.COLUMN_ALREADY_EXISTS,
@@ -418,9 +599,14 @@ export function analyze(
       }
       const expression = typeExpression(operation.expression);
       if (!existing) {
-        columns = [
-          ...columns,
-          { name: operation.name, type: expression.type, nullable: true },
+        env = [
+          ...env,
+          {
+            name: operation.name,
+            flatName: operation.name,
+            type: expression.type,
+            nullable: true,
+          },
         ];
       }
       root = {
@@ -428,7 +614,7 @@ export function analyze(
         input: root,
         name: operation.name,
         expression,
-        outputSchema: [...columns],
+        outputSchema: envToSchema(),
       };
     }
   }
@@ -437,36 +623,36 @@ export function analyze(
   // Selection
   // -------------------------------------------------------------------------
 
-  let outputSchema: LogicalColumn[] = [...columns];
+  let outputSchema: LogicalColumn[] = envToSchema();
   if (program.selection) {
     const seen = new Set<string>();
     const projected: LogicalColumn[] = [];
-    for (const column of program.selection.columns) {
-      const found = findColumn(column.name);
-      if (!found) {
-        error(
-          DiagnosticCodes.UNKNOWN_COLUMN,
-          `La columna "${column.name}" no existe en el esquema actual.`,
-          column.range
-        );
-        continue;
-      }
-      if (seen.has(column.name)) {
+    const projections: { source: string; output: string }[] = [];
+    for (const item of program.selection.columns) {
+      const entry = resolveColumn(item.column, "select");
+      if (!entry) continue;
+      const output = item.alias ?? item.column.name;
+      if (seen.has(output)) {
         error(
           DiagnosticCodes.DUPLICATE_SELECT_COLUMN,
-          `La columna "${column.name}" está repetida en "seleccionar".`,
-          column.range
+          `La columna "${output}" está repetida en "seleccionar".`,
+          item.range
         );
         continue;
       }
-      seen.add(column.name);
-      projected.push(found);
+      seen.add(output);
+      projections.push({ source: entry.flatName, output });
+      projected.push({
+        name: output,
+        type: entry.type,
+        nullable: entry.nullable,
+      });
     }
     outputSchema = projected;
     root = {
       type: "Project",
       input: root,
-      columns: projected.map((c) => c.name),
+      columns: projections,
       outputSchema: [...projected],
     };
   }

@@ -39,8 +39,12 @@ export class PostgreSqlDialect implements SqlDialect {
         return expression.value ? "TRUE" : "FALSE";
       case "null-literal":
         return "NULL";
-      case "column":
-        return this.quoteIdentifier(expression.name);
+      case "column": {
+        const quoted = this.quoteIdentifier(expression.name);
+        return expression.sqlQualifier
+          ? `${expression.sqlQualifier}.${quoted}`
+          : quoted;
+      }
       case "parameter":
         return this.parameterPlaceholder(expression.index);
       case "unary": {

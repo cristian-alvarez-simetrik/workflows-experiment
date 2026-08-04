@@ -1,5 +1,5 @@
 /**
- * Compilador DSL de transformaciones ETL hacia SQL (versión 0.1).
+ * Compilador DSL de transformaciones ETL hacia SQL (versión 0.2).
  *
  * Pipeline: DSL → lexer → parser → AST → análisis semántico → plan lógico
  *           → SQL PostgreSQL → ejecutor PGlite (navegador).

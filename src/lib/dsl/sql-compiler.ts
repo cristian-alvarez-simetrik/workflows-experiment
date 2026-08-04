@@ -3,8 +3,57 @@
  * Every plan step becomes its own CTE (paso_0, paso_1, ...), per spec §24.
  */
 
-import type { LogicalPlan, LogicalPlanNode } from "./plan";
+import type { LogicalPlan, LogicalPlanNode, TypedExpression } from "./plan";
 import type { SqlDialect } from "./sql-dialect";
+
+const JOIN_SQL: Record<string, string> = {
+  inner: "INNER JOIN",
+  left: "LEFT JOIN",
+  right: "RIGHT JOIN",
+  full: "FULL OUTER JOIN",
+};
+
+/**
+ * Clones a join condition, prefixing every column reference with the SQL
+ * qualifier of its side (the previous CTE or the joined table's alias).
+ */
+function qualifyJoinColumns(
+  expression: TypedExpression,
+  leftQualifier: string,
+  rightQualifier: string
+): TypedExpression {
+  const recurse = (e: TypedExpression): TypedExpression =>
+    qualifyJoinColumns(e, leftQualifier, rightQualifier);
+  switch (expression.kind) {
+    case "column":
+      return {
+        ...expression,
+        sqlQualifier:
+          expression.joinSide === "right" ? rightQualifier : leftQualifier,
+      };
+    case "unary":
+      return { ...expression, operand: recurse(expression.operand) };
+    case "binary":
+      return {
+        ...expression,
+        left: recurse(expression.left),
+        right: recurse(expression.right),
+      };
+    case "function-call":
+      return { ...expression, args: expression.args.map(recurse) };
+    case "conditional":
+      return {
+        ...expression,
+        branches: expression.branches.map((b) => ({
+          condition: recurse(b.condition),
+          result: recurse(b.result),
+        })),
+        elseResult: recurse(expression.elseResult),
+      };
+    default:
+      return expression;
+  }
+}
 
 export interface SqlStatement {
   kind: "drop-target" | "create-target";
@@ -42,6 +91,26 @@ export function compileSql(
           `    FROM ${dialect.quoteIdentifier(step.schema)}.${dialect.quoteIdentifier(step.table)}`,
         ].join("\n");
         break;
+      case "Join": {
+        const left = cteName(index - 1);
+        const rightAlias = dialect.quoteIdentifier(step.alias);
+        const condition = qualifyJoinColumns(step.condition, left, rightAlias);
+        const columnLines = step.columns.map((c) => {
+          const side = c.side === "left" ? left : rightAlias;
+          const source = `${side}.${dialect.quoteIdentifier(c.sourceName)}`;
+          return c.sourceName === c.outputName && c.side === "left"
+            ? `        ${source}`
+            : `        ${source} AS ${dialect.quoteIdentifier(c.outputName)}`;
+        });
+        body = [
+          "    SELECT",
+          columnLines.join(",\n"),
+          `    FROM ${left}`,
+          `    ${JOIN_SQL[step.joinType]} ${dialect.quoteIdentifier(step.schema)}.${dialect.quoteIdentifier(step.table)} AS ${rightAlias}`,
+          `        ON ${dialect.emitExpression(condition)}`,
+        ].join("\n");
+        break;
+      }
       case "Filter":
         body = [
           "    SELECT",
@@ -62,7 +131,11 @@ export function compileSql(
         body = [
           "    SELECT",
           step.columns
-            .map((c) => `        ${dialect.quoteIdentifier(c)}`)
+            .map((c) =>
+              c.source === c.output
+                ? `        ${dialect.quoteIdentifier(c.source)}`
+                : `        ${dialect.quoteIdentifier(c.source)} AS ${dialect.quoteIdentifier(c.output)}`
+            )
             .join(",\n"),
           `    FROM ${cteName(index - 1)}`,
         ].join("\n");

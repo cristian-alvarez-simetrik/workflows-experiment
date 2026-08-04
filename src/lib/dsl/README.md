@@ -1,4 +1,4 @@
-# Compilador DSL de transformaciones ETL → SQL (v0.1)
+# Compilador DSL de transformaciones ETL → SQL (v0.2)
 
 Compilador en TypeScript que corre 100 % en el navegador. Pipeline:
 
@@ -22,7 +22,7 @@ muestra viven en `examples.ts`.
 | `semantic-types.ts` | Sistema interno de tipos y reglas de compatibilidad |
 | `functions.ts` | Registro central de funciones (arity, tipos, emisión SQL) |
 | `analyzer.ts` | Validación semántica y construcción del plan lógico |
-| `plan.ts` | Plan lógico tipado (Scan/Filter/AddColumn/Project) |
+| `plan.ts` | Plan lógico tipado (Scan/Join/Filter/AddColumn/Project) |
 | `sql-dialect.ts` | Interfaz de dialecto (preparada para Redshift/Snowflake/BigQuery) |
 | `postgres-dialect.ts` | Dialecto PostgreSQL |
 | `sql-compiler.ts` | Un CTE determinista por paso (`paso_0`, `paso_1`, …) |
@@ -69,9 +69,36 @@ memoria (incluido rollback por conversión inválida).
     los botones del playground. `JsonSchemaProvider` cubre la compilación sin
     base de datos.
 
-## Fuera de alcance (v0.1)
+## Joins (`unir`, v0.2)
 
-Sin `establecer`, `eliminar`, `renombrar`, `filtrar`, joins, agregaciones,
+```
+desde banco.crudo.transacciones como t
+
+unir izquierda banco.crudo.movimientos como m
+    en m.id_transaccion = t.id_transaccion
+    y m.fecha = t.fecha_transaccion
+```
+
+- Tipos: `interna`, `izquierda`, `derecha`, `completa` (obligatorio); el alias
+  (`como`) también es obligatorio en `unir` y opcional en `desde` (por defecto,
+  el nombre de la tabla).
+- Las instrucciones `unir` deben ir inmediatamente después de `desde`, antes
+  de `si` / `agregar columna` / `seleccionar` (`DSL205` si no).
+- En expresiones se admite `alias.columna`. Una columna presente en más de una
+  tabla sin calificar produce `DSL316` (ambigua); un alias inexistente,
+  `DSL315`; un alias repetido, `DSL317`; una condición `en` no booleana,
+  `DSL318`.
+- Aplanado tras el join: las columnas con nombre único lo conservan; las que
+  chocan pasan a `alias_columna` (p. ej. `t_id_transaccion`). `seleccionar`
+  admite `alias.columna como nombre_salida` para renombrar la salida.
+- Nulabilidad: los joins externos vuelven anulables las columnas del lado no
+  preservado.
+- SQL: el join es un CTE `paso_n` más, con lista explícita de columnas y `ON`
+  calificado (`paso_{n-1}."col"` / `"alias"."col"`). El artefacto (v0.2)
+  declara los joins en un campo `joins`.
+
+## Fuera de alcance (v0.2)
+
+Sin `establecer`, `eliminar`, `renombrar`, `filtrar`, agregaciones,
 `group by`, ventanas, `modo anexar`, upsert/merge, SQL embebido ni múltiples
-fuentes/destinos. Las palabras excluidas producen `DSL204` con mensaje de
-versión.
+destinos. Las palabras excluidas producen `DSL204` con mensaje de versión.

@@ -19,12 +19,14 @@
 import type {
   AddColumnNode,
   BinaryOperator,
-  ColumnReferenceNode,
   ConditionalBranch,
   ExpressionNode,
+  JoinNode,
+  JoinType,
   ParameterDeclarationNode,
   ProcessDeclarationNode,
   ProgramNode,
+  SelectColumnNode,
   SelectNode,
   SourceNode,
   TransformationNode,
@@ -50,7 +52,6 @@ const EXCLUDED_STARTERS = new Set([
   "actualizar",
   "insertar",
   "combinar",
-  "unir",
   "union",
   "buscar",
   "join",
@@ -64,6 +65,14 @@ const EXCLUDED_STARTERS = new Set([
 ]);
 
 const EXCLUDED_MODES = new Set(["anexar", "actualizar", "insertar"]);
+
+/** DSL join-type words → logical join types. */
+const JOIN_TYPES: Record<string, JoinType> = {
+  interna: "inner",
+  izquierda: "left",
+  derecha: "right",
+  completa: "full",
+};
 
 interface ParseResult {
   program?: ProgramNode;
@@ -391,6 +400,26 @@ export function parse(tokens: Token[]): ParseResult {
       }
       case "identifier": {
         const nameToken = advance();
+        // Qualified column reference: alias.columna (functions are never qualified).
+        if (!atStatementEnd() && peek().type === "dot") {
+          advance(); // "."
+          const columnToken = expectIdentifier(
+            `el nombre de la columna después de "${nameToken.lexeme}."`
+          );
+          if (!atStatementEnd() && peek().type === "dot") {
+            throw error(
+              DiagnosticCodes.INVALID_REFERENCE,
+              "Las referencias de columna admiten como máximo dos segmentos (alias.columna).",
+              peek().range
+            );
+          }
+          return {
+            type: "ColumnReference",
+            qualifier: nameToken.value as string,
+            name: columnToken.value as string,
+            range: makeRange(nameToken.range.start, columnToken.range.end),
+          };
+        }
         // Function call: identifier immediately followed by "(".
         if (peek().type === "lparen" && !atStatementEnd()) {
           advance(); // "("
@@ -501,6 +530,16 @@ export function parse(tokens: Token[]): ParseResult {
     };
   };
 
+  /** Consumes an optional "como <alias>" suffix. */
+  const parseOptionalAlias = (what: string): Token | undefined => {
+    const token = peek();
+    if (atStatementEnd() || token.type !== "keyword" || token.value !== "como") {
+      return undefined;
+    }
+    advance();
+    return expectIdentifier(what);
+  };
+
   const parseSource = (keyword: Token): SourceNode => {
     const { segments, range } = parseDottedReference(
       "un identificador de la referencia fuente"
@@ -513,13 +552,75 @@ export function parse(tokens: Token[]): ParseResult {
         "Ejemplo: desde banco.crudo.transacciones"
       );
     }
+    const alias = parseOptionalAlias("el alias de la tabla fuente");
     expectStatementEnd("desde");
     return {
       type: "Source",
       connection: segments[0].value as string,
       schema: segments[1].value as string,
       table: segments[2].value as string,
-      range: makeRange(keyword.range.start, range.end),
+      alias: alias ? (alias.value as string) : undefined,
+      range: makeRange(keyword.range.start, (alias ?? { range }).range.end),
+    };
+  };
+
+  const parseJoin = (keyword: Token): JoinNode => {
+    const typeToken = peek();
+    const joinType =
+      !atStatementEnd() && typeToken.type === "identifier"
+        ? JOIN_TYPES[typeToken.value as string]
+        : undefined;
+    if (!joinType) {
+      throw error(
+        DiagnosticCodes.MISSING_TOKEN,
+        'Se esperaba el tipo de unión después de "unir": interna, izquierda, derecha o completa.',
+        typeToken.range,
+        "Ejemplo: unir izquierda banco.depurado.banco como b"
+      );
+    }
+    advance();
+    const { segments, range } = parseDottedReference(
+      "un identificador de la tabla a unir"
+    );
+    if (segments.length !== 3) {
+      throw error(
+        DiagnosticCodes.INVALID_REFERENCE,
+        `La referencia de la tabla a unir debe tener exactamente tres segmentos (conexión.esquema.tabla), pero tiene ${segments.length}.`,
+        range,
+        "Ejemplo: unir izquierda banco.depurado.banco como b"
+      );
+    }
+    const aliasToken = parseOptionalAlias("el alias de la tabla unida");
+    if (!aliasToken) {
+      throw error(
+        DiagnosticCodes.MISSING_TOKEN,
+        'Falta "como <alias>" en la instrucción "unir".',
+        atStatementEnd() ? range : peek().range,
+        "El alias es obligatorio para calificar columnas: unir izquierda banco.depurado.banco como b"
+      );
+    }
+    const enToken = peek();
+    if (atStatementEnd() || enToken.type !== "keyword" || enToken.value !== "en") {
+      throw error(
+        DiagnosticCodes.MISSING_TOKEN,
+        'Falta la condición "en" de la instrucción "unir".',
+        atStatementEnd() ? aliasToken.range : enToken.range,
+        "Ejemplo: en b.user_id = s.user_id"
+      );
+    }
+    advance();
+    const condition = parseExpression(0);
+    expectStatementEnd("unir");
+    return {
+      type: "Join",
+      joinType,
+      connection: segments[0].value as string,
+      schema: segments[1].value as string,
+      table: segments[2].value as string,
+      alias: aliasToken.value as string,
+      aliasRange: aliasToken.range,
+      condition,
+      range: makeRange(keyword.range.start, condition.range.end),
     };
   };
 
@@ -559,13 +660,29 @@ export function parse(tokens: Token[]): ParseResult {
   };
 
   const parseSelect = (keyword: Token): SelectNode => {
-    const columns: ColumnReferenceNode[] = [];
+    const columns: SelectColumnNode[] = [];
     for (;;) {
-      const name = expectIdentifier("el nombre de una columna");
+      const first = expectIdentifier("el nombre de una columna");
+      let qualifier: string | undefined;
+      let nameToken = first;
+      if (!atStatementEnd() && peek().type === "dot") {
+        advance();
+        nameToken = expectIdentifier("el nombre de la columna después del alias");
+        qualifier = first.value as string;
+      }
+      const aliasToken = parseOptionalAlias('el nombre de salida después de "como"');
       columns.push({
-        type: "ColumnReference",
-        name: name.value as string,
-        range: name.range,
+        column: {
+          type: "ColumnReference",
+          qualifier,
+          name: nameToken.value as string,
+          range: makeRange(first.range.start, nameToken.range.end),
+        },
+        alias: aliasToken ? (aliasToken.value as string) : undefined,
+        range: makeRange(
+          first.range.start,
+          (aliasToken ?? nameToken).range.end
+        ),
       });
       if (!atStatementEnd() && peek().type === "comma") {
         advance();
@@ -617,7 +734,7 @@ export function parse(tokens: Token[]): ParseResult {
       throw error(
         DiagnosticCodes.UNSUPPORTED_MODE,
         EXCLUDED_MODES.has(word)
-          ? `El modo "${word}" no está soportado en la versión 0.1.`
+          ? `El modo "${word}" no está soportado en la versión 0.2.`
           : `Modo desconocido "${word}".`,
         modeValue.range,
         'El único modo soportado es "reemplazar".'
@@ -641,6 +758,7 @@ export function parse(tokens: Token[]): ParseResult {
   let processNode: ProcessDeclarationNode | undefined;
   const parameters: ParameterDeclarationNode[] = [];
   let sourceNode: SourceNode | undefined;
+  const joins: JoinNode[] = [];
   const operations: TransformationNode[] = [];
   let selectNode: SelectNode | undefined;
   let writeNode: WriteNode | undefined;
@@ -717,6 +835,25 @@ export function parse(tokens: Token[]): ParseResult {
             } else {
               sourceNode = node;
             }
+            break;
+          }
+          case "unir": {
+            const node = parseJoin(token);
+            if (!sourceNode) {
+              structural(
+                DiagnosticCodes.INVALID_PROGRAM_ORDER,
+                '"unir" debe aparecer después de "desde".',
+                node.range
+              );
+            }
+            if (operations.length > 0 || selectNode) {
+              structural(
+                DiagnosticCodes.INVALID_PROGRAM_ORDER,
+                '"unir" debe aparecer inmediatamente después de "desde", antes de "si", "agregar columna" y "seleccionar".',
+                node.range
+              );
+            }
+            joins.push(node);
             break;
           }
           case "si": {
@@ -796,7 +933,7 @@ export function parse(tokens: Token[]): ParseResult {
         if (EXCLUDED_STARTERS.has(word)) {
           structural(
             DiagnosticCodes.UNSUPPORTED_FEATURE,
-            `La instrucción "${word}" no está soportada en la versión 0.1 del DSL.`,
+            `La instrucción "${word}" no está soportada en la versión 0.2 del DSL.`,
             token.range
           );
         } else {
@@ -868,6 +1005,7 @@ export function parse(tokens: Token[]): ParseResult {
     process: processNode,
     parameters,
     source: sourceNode,
+    joins,
     operations,
     selection: selectNode,
     output: writeNode,

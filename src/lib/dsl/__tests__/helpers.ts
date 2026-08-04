@@ -20,7 +20,23 @@ export const SAMPLE_SCHEMA_DOC = {
   ],
 };
 
-export const provider = new JsonSchemaProvider([SAMPLE_SCHEMA_DOC]);
+/** Second table used by the join ("unir") tests. */
+export const MOVEMENTS_SCHEMA_DOC = {
+  connection: "banco",
+  schema: "crudo",
+  table: "movimientos",
+  columns: [
+    { name: "id_transaccion", type: "integer", nullable: false },
+    { name: "monto", type: "decimal", nullable: true },
+    { name: "referencia", type: "text", nullable: true },
+    { name: "fecha", type: "date", nullable: true },
+  ],
+};
+
+export const provider = new JsonSchemaProvider([
+  SAMPLE_SCHEMA_DOC,
+  MOVEMENTS_SCHEMA_DOC,
+]);
 
 export function parseSource(source: string) {
   const lexed = lex(source);
@@ -48,7 +64,16 @@ export async function analyzeSource(source: string) {
     schema: "crudo",
     table: "transacciones",
   });
-  return analyze(program, schema);
+  const joinSchemas: TableSchema[] = await Promise.all(
+    program.joins.map((join) =>
+      provider.getTableSchema({
+        connection: join.connection,
+        schema: join.schema,
+        table: join.table,
+      })
+    )
+  );
+  return analyze(program, schema, joinSchemas);
 }
 
 export async function compileSource(source: string) {

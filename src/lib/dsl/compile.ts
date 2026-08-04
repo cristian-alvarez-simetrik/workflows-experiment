@@ -71,8 +71,36 @@ export async function compile(
     return { ok: false, diagnostics, program };
   }
 
+  // 3b. Schemas of joined tables ("unir")
+  const joinSchemas: TableSchema[] = [];
+  for (const join of program.joins) {
+    try {
+      joinSchemas.push(
+        await schemaProvider.getTableSchema({
+          connection: join.connection,
+          schema: join.schema,
+          table: join.table,
+        })
+      );
+    } catch (err) {
+      diagnostics.push({
+        code: DiagnosticCodes.SOURCE_TABLE_NOT_FOUND,
+        message:
+          err instanceof SchemaNotFoundError
+            ? err.message
+            : `No se pudo obtener el esquema de la tabla a unir: ${String(err)}`,
+        severity: "error",
+        range: join.range,
+        hint: "La tabla del \"unir\" debe existir antes de compilar el proceso.",
+      });
+    }
+  }
+  if (hasErrors()) {
+    return { ok: false, diagnostics, program, sourceSchema };
+  }
+
   // 4. Semantic analysis → logical plan
-  const analysis = analyze(program, sourceSchema);
+  const analysis = analyze(program, sourceSchema, joinSchemas);
   diagnostics.push(...analysis.diagnostics);
   if (!analysis.plan || hasErrors()) {
     return { ok: false, diagnostics, program, sourceSchema };

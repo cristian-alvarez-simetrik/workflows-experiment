@@ -1,5 +1,6 @@
 /** Compiled artifact: the portable JSON output of the `compilar` step. */
 
+import type { JoinType } from "./ast";
 import type { LogicalPlan } from "./plan";
 import type { SqlStatement } from "./sql-compiler";
 
@@ -8,6 +9,8 @@ export interface CompiledArtifact {
   dslVersion: string;
   processName: string;
   source: { connection: string; schema: string; table: string };
+  /** Extra tables read via "unir", in join order. */
+  joins: { schema: string; table: string; alias: string; joinType: JoinType }[];
   target: {
     connection: string;
     schema: string;
@@ -26,8 +29,8 @@ export interface CompiledArtifact {
   sourceHash: string;
 }
 
-export const COMPILER_VERSION = "0.1.0";
-export const DSL_VERSION = "0.1.0";
+export const COMPILER_VERSION = "0.2.0";
+export const DSL_VERSION = "0.2.0";
 
 /** Normalize the DSL source before hashing: LF endings, no trailing blanks. */
 export function normalizeSource(source: string): string {
@@ -61,11 +64,24 @@ export async function buildArtifact(
     }
   }
 
+  const joins: CompiledArtifact["joins"] = [];
+  for (let node = plan.root; "input" in node; node = node.input) {
+    if (node.type === "Join") {
+      joins.unshift({
+        schema: node.schema,
+        table: node.table,
+        alias: node.alias,
+        joinType: node.joinType,
+      });
+    }
+  }
+
   return {
     compilerVersion: COMPILER_VERSION,
     dslVersion: DSL_VERSION,
     processName: plan.processName,
     source: scanInfo,
+    joins,
     target: {
       connection: plan.sourceConnection,
       schema: plan.output.schema,

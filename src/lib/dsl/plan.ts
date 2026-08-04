@@ -1,6 +1,6 @@
 /** Logical plan: dialect-independent output of semantic analysis. */
 
-import type { BinaryOperator, UnaryOperator } from "./ast";
+import type { BinaryOperator, JoinType, UnaryOperator } from "./ast";
 import type { SemanticType } from "./semantic-types";
 
 // ---------------------------------------------------------------------------
@@ -32,8 +32,13 @@ export interface TypedNullLiteral {
 
 export interface TypedColumnReference {
   kind: "column";
+  /** Flat SQL column name at this point of the pipeline. */
   name: string;
   type: SemanticType;
+  /** Only inside a JoinPlan condition: which side the column belongs to. */
+  joinSide?: "left" | "right";
+  /** SQL-ready prefix (already quoted/safe), set by the SQL compiler. */
+  sqlQualifier?: string;
 }
 
 export interface TypedParameterReference {
@@ -105,6 +110,26 @@ export interface ScanPlan {
   outputSchema: LogicalColumn[];
 }
 
+export interface JoinColumnMapping {
+  side: "left" | "right";
+  /** Name on that side (left: previous step output; right: raw table column). */
+  sourceName: string;
+  /** Unique flat name after the join (collisions become alias_columna). */
+  outputName: string;
+}
+
+export interface JoinPlan {
+  type: "Join";
+  input: LogicalPlanNode;
+  joinType: JoinType;
+  schema: string;
+  table: string;
+  alias: string;
+  condition: TypedExpression;
+  columns: JoinColumnMapping[];
+  outputSchema: LogicalColumn[];
+}
+
 export interface FilterPlan {
   type: "Filter";
   input: LogicalPlanNode;
@@ -123,12 +148,13 @@ export interface AddColumnPlan {
 export interface ProjectPlan {
   type: "Project";
   input: LogicalPlanNode;
-  columns: string[];
+  columns: { source: string; output: string }[];
   outputSchema: LogicalColumn[];
 }
 
 export type LogicalPlanNode =
   | ScanPlan
+  | JoinPlan
   | FilterPlan
   | AddColumnPlan
   | ProjectPlan;

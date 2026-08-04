@@ -32,6 +32,8 @@ export interface NullLiteralNode {
 
 export interface ColumnReferenceNode {
   type: "ColumnReference";
+  /** Table alias when the reference is qualified: alias.columna. */
+  qualifier?: string;
   name: string;
   range: SourceRange;
 }
@@ -127,6 +129,22 @@ export interface SourceNode {
   connection: string;
   schema: string;
   table: string;
+  /** Optional alias ("como s"); defaults to the table name. */
+  alias?: string;
+  range: SourceRange;
+}
+
+export type JoinType = "inner" | "left" | "right" | "full";
+
+export interface JoinNode {
+  type: "Join";
+  joinType: JoinType;
+  connection: string;
+  schema: string;
+  table: string;
+  alias: string;
+  aliasRange: SourceRange;
+  condition: ExpressionNode;
   range: SourceRange;
 }
 
@@ -146,9 +164,16 @@ export interface AddColumnNode {
 
 export type TransformationNode = FilterNode | AddColumnNode;
 
+export interface SelectColumnNode {
+  column: ColumnReferenceNode;
+  /** Output name when renamed with "como". */
+  alias?: string;
+  range: SourceRange;
+}
+
 export interface SelectNode {
   type: "Select";
-  columns: ColumnReferenceNode[];
+  columns: SelectColumnNode[];
   range: SourceRange;
 }
 
@@ -165,6 +190,7 @@ export interface ProgramNode {
   process: ProcessDeclarationNode;
   parameters: ParameterDeclarationNode[];
   source: SourceNode;
+  joins: JoinNode[];
   operations: TransformationNode[];
   selection?: SelectNode;
   output: WriteNode;

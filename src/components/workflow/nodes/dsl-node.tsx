@@ -71,7 +71,7 @@ export function DslNode({ id, data, selected }: NodeProps) {
           )}
           <CodeEditorDrawer
             title="Edit DSL"
-            description="Proceso ETL compilado a SQL y ejecutado en PGlite al correr el nodo. La salida del nodo es el nombre de la tabla destino (esquema.tabla); un nodo DSL posterior puede leerla con «desde banco.{{input}}»."
+            description="Proceso ETL compilado a SQL y ejecutado en PGlite al correr el nodo. La salida del nodo es el nombre de la tabla destino (esquema.tabla); un nodo DSL posterior puede leerla con «desde banco.{{input}}» o unir dos entradas con «desde banco.{{input0}} como s» + «unir izquierda banco.{{input1}} como b» seguido de «en b.col = s.col»."
             value={nodeData.dsl}
             language="text"
             placeholder={DSL_PLACEHOLDER}

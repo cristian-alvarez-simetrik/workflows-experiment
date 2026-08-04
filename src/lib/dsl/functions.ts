@@ -42,7 +42,7 @@ export interface FunctionDefinition {
   ): string;
 }
 
-/** DSL date formats accepted by convertir_fecha in version 0.1. */
+/** DSL date formats accepted by convertir_fecha in version 0.2. */
 export const SUPPORTED_DATE_FORMATS = ["yyyy-MM-dd", "dd/MM/yyyy", "yyyyMMdd"];
 
 const acceptsText = (t: SemanticType) => t.kind === "text" || isFlexible(t);

@@ -88,7 +88,7 @@ escribir depurado.salida
       (d) => d.code === DiagnosticCodes.UNSUPPORTED_MODE
     );
     expect(diag?.message).toContain("anexar");
-    expect(diag?.message).toContain("0.1");
+    expect(diag?.message).toContain("0.2");
   });
 
   it("rechaza proceso duplicado", () => {
@@ -158,7 +158,7 @@ escribir depurado.salida
       (d) => d.code === DiagnosticCodes.UNSUPPORTED_FEATURE
     );
     expect(diag?.message).toContain("filtrar");
-    expect(diag?.message).toContain("0.1");
+    expect(diag?.message).toContain("0.2");
   });
 
   it("reporta instrucciones desconocidas", () => {
@@ -204,7 +204,7 @@ seleccionar
 escribir depurado.salida
     modo reemplazar
 `);
-    expect(program.selection?.columns.map((c) => c.name)).toEqual([
+    expect(program.selection?.columns.map((c) => c.column.name)).toEqual([
       "id_transaccion",
       "cuenta",
     ]);

@@ -103,6 +103,32 @@ escribir depurado.transacciones_clasificadas
 `,
   },
   {
+    id: "unir-tablas",
+    title: "Unir tablas (join)",
+    description:
+      "LEFT JOIN entre dos tablas con alias, columnas calificadas y renombre en seleccionar.",
+    source: `proceso enriquecer_transacciones
+
+desde banco.crudo.transacciones como t
+
+unir izquierda banco.crudo.movimientos como m
+    en m.id_transaccion = t.id_transaccion
+
+agregar columna monto_conciliado =
+    coalescer(m.monto, 0)
+
+seleccionar
+    t.id_transaccion como id_transaccion,
+    cuenta,
+    monto_original,
+    monto_conciliado,
+    referencia
+
+escribir depurado.transacciones_enriquecidas
+    modo reemplazar
+`,
+  },
+  {
     id: "error-operador",
     title: "Error: operador ==",
     description: "Demuestra el diagnóstico DSL105 con sugerencia.",
@@ -138,6 +164,18 @@ INSERT INTO crudo.transacciones VALUES
   (6, 'AMEX-3',     '-12000',   'ACTIVO',    DATE '2026-06-18'),
   (7, 'visa-12',    '75.25',    'CANCELADO', DATE '2026-07-02'),
   (8, ' ach-020',   '999.99',   'ACTIVO',    DATE '2025-12-30');
+DROP TABLE IF EXISTS crudo.movimientos;
+CREATE TABLE crudo.movimientos (
+  id_transaccion INTEGER NOT NULL,
+  monto NUMERIC,
+  referencia TEXT,
+  fecha DATE
+);
+INSERT INTO crudo.movimientos VALUES
+  (1, 1250.50, 'MOV-A1', DATE '2026-01-15'),
+  (2, -89.99,  'MOV-B4', DATE '2026-02-03'),
+  (3, 14990,   'MOV-C9', DATE '2026-03-22'),
+  (6, -12000,  'MOV-F2', DATE '2026-06-18');
 `;
 
 export const SEED_TABLE = { schema: "crudo", table: "transacciones" };

@@ -27,6 +27,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { dslConciliationMeta } from "@/lib/examples/dsl-conciliation";
 import { simpleConciliationMeta } from "@/lib/examples/simple-conciliation";
 import {
   createWorkflow,
@@ -36,7 +37,7 @@ import {
   type StoredWorkflow,
 } from "@/lib/workflow-store";
 
-const EXAMPLES = [simpleConciliationMeta];
+const EXAMPLES = [simpleConciliationMeta, dslConciliationMeta];
 
 function openWorkflow(id: string) {
   window.location.hash = `#/w/${id}`;
