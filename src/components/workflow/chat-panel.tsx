@@ -72,6 +72,7 @@ import {
   saveApiKey,
   setStoredModel,
 } from "@/lib/api-key-store";
+import { subscribeChatRefs } from "@/lib/chat-refs";
 import {
   clearChatMessages,
   loadChatMessages,
@@ -321,6 +322,20 @@ function ChatBody({
     [workflowId]
   );
 
+  // Controlled so node "Add to chat" references can be appended from outside.
+  const [input, setInput] = useState("");
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  useEffect(
+    () =>
+      subscribeChatRefs((ref) => {
+        setInput((prev) =>
+          prev && !prev.endsWith(" ") ? `${prev} ${ref} ` : `${prev}${ref} `
+        );
+        textareaRef.current?.focus();
+      }),
+    []
+  );
+
   const { messages, sendMessage, status, stop, setMessages, error } = useChat({
     id: `wf-${workflowId}`,
     transport,
@@ -456,11 +471,17 @@ function ChatBody({
           onSubmit={({ text }) => {
             const trimmed = text?.trim();
             if (!trimmed) return;
+            setInput("");
             void sendMessage({ text: trimmed });
           }}
         >
           <PromptInputBody>
-            <PromptInputTextarea placeholder="Ask the assistant…" />
+            <PromptInputTextarea
+              ref={textareaRef}
+              placeholder="Ask the assistant…"
+              value={input}
+              onChange={(e) => setInput(e.currentTarget.value)}
+            />
           </PromptInputBody>
           <PromptInputFooter>
             <PromptInputSubmit

@@ -45,6 +45,7 @@ ${advanced ? DATA_FLOW_ADVANCED : DATA_FLOW_BASIC}
 
 ## How to work
 - Start with list_nodes (and get_node for anything you'll modify) so you never edit blind.
+- Mentions like \`@[label](node:<id>)\` in a user message reference a specific node on the canvas — use that <id> directly with get_node / update_node / run_node instead of guessing by name.
 - After creating or editing nodes, run them (run_node / run_workflow) and check the returned per-node statuses, errors and logs. Fix problems and re-run.
 - Use query_database to inspect tables/data when debugging.
 - The user sees the canvas live: nodes you add/edit appear immediately, and everything you change is auto-saved.

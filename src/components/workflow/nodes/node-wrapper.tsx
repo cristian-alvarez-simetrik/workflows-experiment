@@ -1,7 +1,7 @@
 
 import { useState } from "react";
-import { Handle, Position, useReactFlow } from "@xyflow/react";
-import { Loader2, Play, Trash2 } from "lucide-react";
+import { Handle, NodeToolbar, Position, useReactFlow } from "@xyflow/react";
+import { Loader2, MessageSquarePlus, Play, Trash2 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import {
   AlertDialog,
@@ -21,6 +21,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { formatNodeRef, pushChatRef } from "@/lib/chat-refs";
 import { cn } from "@/lib/utils";
 import type { NodeStatus } from "@/lib/types";
 import { useWorkflowRunner } from "../run-context";
@@ -86,6 +87,18 @@ export function NodeWrapper({
         selected && "ring-2 ring-ring/60",
       )}
     >
+      <NodeToolbar isVisible={selected} position={Position.Bottom} offset={8}>
+        <Button
+          variant="secondary"
+          size="sm"
+          className="h-7 gap-1.5 border text-xs shadow-md"
+          onClick={() => pushChatRef(formatNodeRef(label, id))}
+        >
+          <MessageSquarePlus className="h-3.5 w-3.5 text-violet-400" />
+          Add to chat
+        </Button>
+      </NodeToolbar>
+
       {hasInput && (
         <Handle
           type="target"

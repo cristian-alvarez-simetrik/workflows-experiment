@@ -86,6 +86,7 @@ import {
 } from "@/lib/ai/agent-api";
 import { isAdvancedMode } from "@/lib/app-settings";
 import { BUILTIN_FACTORIES, type BuiltinKind } from "@/lib/builtins";
+import { registerChatOpener } from "@/lib/chat-refs";
 import { listTables, runQuery } from "@/lib/db";
 import { runNodes, withDownstream } from "@/lib/engine";
 import { appendRun, listRuns, type RunNodeEntry } from "@/lib/run-history";
@@ -441,6 +442,17 @@ function CanvasInner({ workflowId }: { workflowId: string }) {
       localStorage.setItem(CHAT_OPEN_KEY, String(!open));
       return !open;
     });
+
+  // "Add to chat" on a node opens the panel if it's closed; the reference
+  // itself is buffered by the bus until the chat input mounts.
+  useEffect(
+    () =>
+      registerChatOpener(() => {
+        localStorage.setItem(CHAT_OPEN_KEY, "true");
+        setChatOpen(true);
+      }),
+    []
+  );
 
   // --- AI agent bridge -----------------------------------------------------
   // The chat tools live outside React's render cycle, so they read canvas
