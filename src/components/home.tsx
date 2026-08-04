@@ -33,6 +33,7 @@ import { isAdvancedMode, setAdvancedMode } from "@/lib/app-settings";
 import { dslConciliationMeta } from "@/lib/examples/dsl-conciliation";
 import {
   createWorkflow,
+  deleteAllWorkflows,
   deleteWorkflow,
   listWorkflows,
   saveWorkflow,
@@ -82,6 +83,11 @@ export function HomePage() {
     setWorkflows(
       [...listWorkflows()].sort((a, b) => b.updatedAt - a.updatedAt)
     );
+  };
+
+  const removeAll = () => {
+    deleteAllWorkflows();
+    setWorkflows([]);
   };
 
   return (
@@ -154,9 +160,43 @@ export function HomePage() {
       </section>
 
       <section>
-        <h2 className="mb-3 text-sm font-medium uppercase tracking-wide text-muted-foreground">
-          Your workflows
-        </h2>
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="text-sm font-medium uppercase tracking-wide text-muted-foreground">
+            Your workflows
+          </h2>
+          {workflows.length > 0 && (
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="text-muted-foreground hover:text-destructive"
+                >
+                  <Trash2 className="h-4 w-4" />
+                  Borrar todo
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>
+                    ¿Borrar los {workflows.length} workflows?
+                  </AlertDialogTitle>
+                  <AlertDialogDescription>
+                    Todos los workflows y sus grafos de nodos se eliminarán del
+                    almacenamiento local. Las tablas ya cargadas en PGlite se
+                    conservan.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                  <AlertDialogAction onClick={removeAll}>
+                    Borrar todo
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          )}
+        </div>
         {workflows.length === 0 ? (
           <p className="rounded-lg border border-dashed px-4 py-8 text-center text-sm text-muted-foreground">
             Nothing here yet — start a new workflow or open an example.

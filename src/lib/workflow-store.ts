@@ -50,6 +50,10 @@ export function deleteWorkflow(id: string): void {
   window.localStorage.setItem(WORKFLOWS_KEY, JSON.stringify(all));
 }
 
+export function deleteAllWorkflows(): void {
+  window.localStorage.removeItem(WORKFLOWS_KEY);
+}
+
 export function getActiveWorkflowId(): string | null {
   if (typeof window === "undefined") return null;
   return window.localStorage.getItem(ACTIVE_KEY);
